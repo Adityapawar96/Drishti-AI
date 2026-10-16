@@ -1,0 +1,21 @@
+{
+  "settings_version": "0.0.6",
+  "datasets_dir": "C:\\Users\\ADITYA\\AndroidStudioProjects\\DrishtiJava\\datasets",
+  "weights_dir": "weights",
+  "runs_dir": "runs",
+  "uuid": "35aaf0d2d83190c9dbd9e152118da3dcaccb08fa00848a2fb46268c8814c001c",
+  "sync": true,
+  "api_key": "",
+  "openai_api_key": "",
+  "clearml": true,
+  "comet": true,
+  "dvc": true,
+  "hub": true,
+  "mlflow": true,
+  "neptune": true,
+  "raytune": true,
+  "tensorboard": false,
+  "wandb": false,
+  "vscode_msg": true,
+  "openvino_msg": true
+}

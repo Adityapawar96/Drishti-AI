@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="file" path="face-profiles.enc" />
+    <exclude domain="file" path="face-profiles.enc.bak" />
+    <exclude domain="file" path="face-profiles.enc.new" />
+</full-backup-content>

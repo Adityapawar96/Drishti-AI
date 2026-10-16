@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="duo_green">#58CC02</color>
+    <color name="duo_green_deep">#347D16</color>
+    <color name="duo_canvas">#F4FAF3</color>
+    <color name="duo_surface">#FFFFFFFF</color>
+    <color name="duo_ink">#19351D</color>
+    <color name="duo_button_text">#19351D</color>
+    <color name="duo_muted">#4E6252</color>
+    <color name="duo_border">#D7E6D5</color>
+    <color name="duo_pale_green">#E8F8E1</color>
+    <color name="duo_panel">#123524</color>
+</resources>
