@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.DrishtiJava" parent="Base.Theme.DrishtiJava">
+        <item name="android:windowSplashScreenBackground">@color/color_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_drishti_logo</item>
+        <item name="android:windowSplashScreenAnimationDuration">180</item>
+    </style>
+</resources>

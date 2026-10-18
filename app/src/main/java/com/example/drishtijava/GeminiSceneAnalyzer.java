@@ -41,7 +41,7 @@ final class GeminiSceneAnalyzer implements AutoCloseable {
     }
 
     /** Copies the camera buffer briefly, then resizes, encodes, and uploads off the camera thread. */
-    void analyze(ImageProxy image, Callback callback) {
+    void analyze(ImageProxy image, SpeechLanguage language, Callback callback) {
         final RgbaFrame frame;
         try {
             ImageProxy.PlaneProxy plane = image.getPlanes()[0];
@@ -73,7 +73,7 @@ final class GeminiSceneAnalyzer implements AutoCloseable {
                         return;
                     }
                     bitmap = frame.toBitmap(1024);
-                    callback.onSuccess(send(bitmap));
+                    callback.onSuccess(send(bitmap, language));
                 } catch (SocketTimeoutException e) {
                     callback.onFailure("Gemini timed out. Check your connection and try again.");
                 } catch (ApiException e) {
@@ -148,7 +148,7 @@ final class GeminiSceneAnalyzer implements AutoCloseable {
         }
     }
 
-    private String send(Bitmap bitmap) throws Exception {
+    private String send(Bitmap bitmap, SpeechLanguage language) throws Exception {
         ByteArrayOutputStream jpeg = new ByteArrayOutputStream();
         if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 80, jpeg)) {
             throw new IOException("Could not encode camera image");
@@ -160,7 +160,7 @@ final class GeminiSceneAnalyzer implements AutoCloseable {
                         .put("mime_type", "image/jpeg")
                         .put("data", imageData));
         JSONArray parts = new JSONArray()
-                .put(new JSONObject().put("text", PROMPT))
+                .put(new JSONObject().put("text", promptFor(language)))
                 .put(imagePart);
         JSONObject request = new JSONObject()
                 .put("contents", new JSONArray().put(new JSONObject().put("parts", parts)))
@@ -200,6 +200,12 @@ final class GeminiSceneAnalyzer implements AutoCloseable {
             activeConnection = null;
             connection.disconnect();
         }
+    }
+
+    private static String promptFor(SpeechLanguage language) {
+        if (language == SpeechLanguage.HINDI) return PROMPT + " Respond in Hindi.";
+        if (language == SpeechLanguage.MARATHI) return PROMPT + " Respond in Marathi.";
+        return PROMPT + " Respond in English.";
     }
 
     private static String readLimited(InputStream stream) throws IOException {

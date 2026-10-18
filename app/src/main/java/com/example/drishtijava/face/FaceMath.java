@@ -3,6 +3,8 @@ package com.example.drishtijava.face;
 import java.util.List;
 
 public final class FaceMath {
+    private static final float MIN_PROFILE_SCORE_MARGIN = 0.04f;
+
     private FaceMath() { }
 
     public static float[] normalized(float[] embedding) {
@@ -43,16 +45,24 @@ public final class FaceMath {
     public static Match bestMatch(float[] embedding, List<FaceProfile> profiles, float threshold) {
         String bestName = null;
         float bestScore = -1f;
+        float secondBestScore = -1f;
         for (FaceProfile profile : profiles) {
+            float profileScore = -1f;
             for (float[] reference : profile.getReferences()) {
                 float score = cosineSimilarity(embedding, reference);
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestName = profile.name;
-                }
+                if (score > profileScore) profileScore = score;
+            }
+            if (profileScore > bestScore) {
+                secondBestScore = bestScore;
+                bestScore = profileScore;
+                bestName = profile.name;
+            } else if (profileScore > secondBestScore) {
+                secondBestScore = profileScore;
             }
         }
-        return new Match(bestScore >= threshold ? bestName : null, bestScore);
+        boolean clearlyBest = secondBestScore < 0
+                || bestScore - secondBestScore >= MIN_PROFILE_SCORE_MARGIN;
+        return new Match(bestScore >= threshold && clearlyBest ? bestName : null, bestScore);
     }
 
     public static final class Match {

@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/cameraSetupDialogRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/duo_card_background"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/cameraSetupTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingBottom="4dp"
+        android:text="@string/camera_setup_title"
+        android:textColor="?attr/colorOnPrimaryContainer"
+        android:textSize="24sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/cameraSetupStepIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityLiveRegion="polite"
+        android:gravity="center"
+        android:paddingBottom="4dp"
+        android:textColor="?attr/colorOnSurface"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <ImageView
+        android:id="@+id/cameraSetupImage"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:adjustViewBounds="false"
+        android:contentDescription="@string/camera_setup_image_1_description"
+        android:scaleType="fitCenter" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="136dp"
+        android:layout_marginTop="4dp"
+        android:fillViewport="true"
+        android:overScrollMode="never">
+
+        <TextView
+            android:id="@+id/cameraSetupInstruction"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:padding="4dp"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="18sp" />
+    </ScrollView>
+
+    <LinearLayout
+        android:id="@+id/cameraSetupPageDots"
+        android:layout_width="144dp"
+        android:layout_height="48dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="4dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:id="@+id/cameraSetupDotStep1"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:clickable="true"
+            android:contentDescription="@string/camera_setup_step_1_dot_current"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            android:importantForAccessibility="yes">
+
+            <View
+                android:id="@+id/cameraSetupDotStep1Indicator"
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:layout_gravity="center"
+                android:background="@drawable/camera_setup_dot_active" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/cameraSetupDotStep2"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:clickable="true"
+            android:contentDescription="@string/camera_setup_step_2_dot_action"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            android:importantForAccessibility="yes">
+
+            <View
+                android:id="@+id/cameraSetupDotStep2Indicator"
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:layout_gravity="center"
+                android:background="@drawable/camera_setup_dot_inactive" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/cameraSetupDotStep3"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:clickable="true"
+            android:contentDescription="@string/camera_setup_step_3_dot_action"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            android:importantForAccessibility="yes">
+
+            <View
+                android:id="@+id/cameraSetupDotStep3Indicator"
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:layout_gravity="center"
+                android:background="@drawable/camera_setup_dot_inactive" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/cameraSetupGotItButton"
+        style="@style/Widget.Drishti.Button.Text"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        app:backgroundTint="@color/color_transparent"
+        android:contentDescription="@string/camera_setup_got_it"
+        android:text="@string/camera_setup_got_it"
+        android:visibility="invisible" />
+</LinearLayout>

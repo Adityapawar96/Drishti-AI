@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-    <solid android:color="#12000000" />
-    <stroke android:width="3dp" android:color="@color/duo_green" />
-</shape>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/camera_face_guide_scrim" />
+            <stroke android:width="7dp" android:color="@color/color_on_primary" />
+        </shape>
+    </item>
+    <item android:top="2dp" android:bottom="2dp" android:left="2dp" android:right="2dp">
+        <shape android:shape="oval">
+            <solid android:color="@color/color_transparent" />
+            <stroke android:width="3dp" android:color="@color/color_primary" />
+        </shape>
+    </item>
+</layer-list>

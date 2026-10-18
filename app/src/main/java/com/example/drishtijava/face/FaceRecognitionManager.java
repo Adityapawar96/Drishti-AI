@@ -13,6 +13,7 @@ import androidx.annotation.NonNull;
 
 import com.example.drishtijava.Detection;
 import com.example.drishtijava.ObjectAlertSpeaker;
+import com.example.drishtijava.SpeechLocalizer;
 import com.google.mlkit.vision.face.Face;
 import com.google.mlkit.vision.face.FaceDetection;
 import com.google.mlkit.vision.face.FaceDetector;
@@ -34,12 +35,12 @@ import java.util.concurrent.atomic.AtomicLong;
 /** Owns local face matching and person appearance alerts; YOLO remains the person detector. */
 public final class FaceRecognitionManager implements AutoCloseable {
     private static final String TAG = "FaceRecognition";
-    private static final float MATCH_THRESHOLD = 0.75f;
-    private static final long GENERIC_DELAY_MS = 1000;
+    private static final float MATCH_THRESHOLD = 0.68f;
+    private static final long GENERIC_DELAY_MS = 1800;
     private static final long CONTINUOUS_VISIBILITY_MS = 250;
-    private static final int MAX_FACE_BITMAP_DIMENSION = 640;
-    private static final int MIN_FACE_PIXELS = 64;
+    private static final int MIN_FACE_PIXELS = 48;
     private static final float POSSIBLE_PERSON_CONFIDENCE = 0.40f;
+    private static final float MIN_GENERIC_PERSON_CONFIDENCE = 0.20f;
     private static final long MIN_FACE_SAMPLE_INTERVAL_MS = 1000;
 
     private final Context appContext;
@@ -62,16 +63,25 @@ public final class FaceRecognitionManager implements AutoCloseable {
         this.speaker = speaker;
         profileStore = new FaceProfileStore(appContext);
         FaceDetectorOptions options = new FaceDetectorOptions.Builder()
-                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
                 .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
                 .enableTracking()
-                .setMinFaceSize(0.10f)
+                .setMinFaceSize(0.06f)
                 .build();
         faceDetector = FaceDetection.getClient(options);
     }
 
     public boolean hasProfiles() { return profileCount > 0; }
     public boolean isReady() { return ready; }
+    public boolean hasRecentPersonTrack() {
+        if (closed || !hasProfiles()) return false;
+        long now = SystemClock.elapsedRealtime();
+        for (PersonAppearanceTracker.PersonTrack track : tracker.snapshot()) {
+            if (!PersonAppearanceTracker.isRearmed(track.lastSeenAtMs, now)) return true;
+        }
+        return false;
+    }
+
     public boolean canAcceptSampledFrame() {
         return !closed && ready && !faceTaskInFlight.get()
                 && SystemClock.elapsedRealtime() - lastFaceSampleAtMs.get() >= MIN_FACE_SAMPLE_INTERVAL_MS;
@@ -169,7 +179,7 @@ public final class FaceRecognitionManager implements AutoCloseable {
 
     private void analyzeFaces(Bitmap bitmap, float scaleX, float scaleY, int frameWidth, List<Face> faces) {
         long now = SystemClock.elapsedRealtime();
-        List<String> namedAlerts = new ArrayList<>();
+        List<SpeechLocalizer.NamedPerson> namedAlerts = new ArrayList<>();
         Set<Long> processedTracks = new HashSet<>();
         synchronized (tracker) {
             for (Face face : faces) {
@@ -178,7 +188,7 @@ public final class FaceRecognitionManager implements AutoCloseable {
                 RectF sourceBox = new RectF(bounds.left / scaleX, bounds.top / scaleY,
                         bounds.right / scaleX, bounds.bottom / scaleY);
                 PersonAppearanceTracker.PersonTrack track = tracker.findForFace(sourceBox);
-                if (track == null || track.nameAnnounced || track.genericAnnounced
+                if (track == null || track.nameAnnounced
                         || !processedTracks.add(track.id)) continue;
                 Bitmap aligned = FaceAligner.align(bitmap, face);
                 if (aligned == null) continue;
@@ -192,15 +202,16 @@ public final class FaceRecognitionManager implements AutoCloseable {
 
                 FaceMath.Match match = FaceMath.bestMatch(embedding, profiles, MATCH_THRESHOLD);
                 String resolved = track.consensus.addSample(match.name);
-                if (resolved != null && !track.genericAnnounced && !track.nameAnnounced) {
+                if (resolved != null && !track.nameAnnounced) {
                     track.nameAnnounced = true;
                     track.resolvedName = resolved;
-                    namedAlerts.add(resolved + ", " + locationFor(track.box, frameWidth) + ".");
+                    namedAlerts.add(new SpeechLocalizer.NamedPerson(
+                            resolved, locationFor(track.box, frameWidth)));
                 }
             }
         }
         if (!namedAlerts.isEmpty()) {
-            speaker.speakFaceAlert(joinSentences(namedAlerts));
+            speaker.speakKnownPersonAlerts(namedAlerts);
         }
     }
 
@@ -211,6 +222,7 @@ public final class FaceRecognitionManager implements AutoCloseable {
         synchronized (tracker) {
             for (PersonAppearanceTracker.PersonTrack track : tracker.snapshot()) {
                 if (!track.nameAnnounced && !track.genericAnnounced
+                        && track.confidence >= MIN_GENERIC_PERSON_CONFIDENCE
                         && now - track.firstSeenAtMs >= GENERIC_DELAY_MS
                         && now - track.lastSeenAtMs <= CONTINUOUS_VISIBILITY_MS) {
                     track.genericAnnounced = true;
@@ -219,31 +231,20 @@ public final class FaceRecognitionManager implements AutoCloseable {
             }
         }
         if (pending.isEmpty()) return;
-        String message;
         if (pending.size() == 1) {
-            String prefix = pending.get(0).confidence < POSSIBLE_PERSON_CONFIDENCE
-                    ? "Possible person" : "Person";
-            message = prefix + ", " + locationFor(pending.get(0).box, frameWidthForAlerts) + ".";
+            boolean possible = pending.get(0).confidence < POSSIBLE_PERSON_CONFIDENCE;
+            speaker.speakPersonAlert(1, possible,
+                    locationFor(pending.get(0).box, frameWidthForAlerts));
         } else {
-            message = pending.size() + " people in the camera view.";
+            speaker.speakPersonAlert(pending.size(), false, SpeechLocalizer.Location.VIEW);
         }
-        speaker.speakFaceAlert(message);
     }
 
-    private static String locationFor(RectF box, int width) {
-        if (width <= 0) return "in the camera view";
-        if (box.centerX() < width / 3f) return "on the left side of the view";
-        if (box.centerX() > width * 2f / 3f) return "on the right side of the view";
-        return "in the center of the view";
-    }
-
-    private static String joinSentences(List<String> sentences) {
-        StringBuilder result = new StringBuilder();
-        for (String sentence : sentences) {
-            if (result.length() > 0) result.append(' ');
-            result.append(sentence);
-        }
-        return result.toString();
+    private static SpeechLocalizer.Location locationFor(RectF box, int width) {
+        if (width <= 0) return SpeechLocalizer.Location.VIEW;
+        if (box.centerX() < width / 3f) return SpeechLocalizer.Location.LEFT;
+        if (box.centerX() > width * 2f / 3f) return SpeechLocalizer.Location.RIGHT;
+        return SpeechLocalizer.Location.CENTER;
     }
 
     @Override public void close() {

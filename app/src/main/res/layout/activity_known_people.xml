@@ -1,98 +1,176 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/knownPeopleRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/duo_canvas"
-    android:fillViewport="true">
+    android:background="?android:attr/colorBackground"
+    android:fitsSystemWindows="true">
 
-    <LinearLayout
+    <!-- Top Header Bar matching common edge and Home/Back button position -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/knownPeopleHeader"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="20dp">
+        android:paddingStart="16dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="12dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <TextView
             android:id="@+id/knownPeopleTitle"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:accessibilityHeading="true"
-            android:fontFamily="sans-serif-rounded"
-            android:text="Known people"
-            android:textColor="@color/duo_ink"
-            android:textSize="32sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical|start"
+            android:text="@string/known_people"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toBottomOf="@id/knownPeopleBackButton"
+            app:layout_constraintEnd_toStartOf="@id/knownPeopleBackButton"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@id/knownPeopleBackButton" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Recognize familiar people when they appear."
-            android:textColor="@color/duo_muted"
-            android:textSize="18sp" />
+        <ImageButton
+            android:id="@+id/knownPeopleBackButton"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:background="@drawable/home_button_background"
+            android:contentDescription="@string/back_to_settings"
+            android:minWidth="56dp"
+            android:minHeight="56dp"
+            android:padding="16dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_home"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="@color/color_icon" />
 
-        <TextView
-            android:id="@+id/knownPeoplePrivacy"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:background="@drawable/duo_info_card_background"
-            android:padding="18dp"
-            android:text="Your privacy matters: face profiles are encrypted on this device. Photos are not saved. Add someone only with their informed consent."
-            android:textColor="@color/duo_button_text"
-            android:textSize="17sp" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <EditText
-            android:id="@+id/personNameInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:backgroundTint="@color/duo_green_deep"
-            android:hint="Person's name"
-            android:inputType="textPersonName|textCapWords"
-            android:minHeight="60dp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:contentDescription="Enter the name to speak when this person appears"
-            android:textColor="@color/duo_ink"
-            android:textSize="18sp" />
-
-        <Button
-            android:id="@+id/addKnownPersonButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:backgroundTint="@color/duo_green"
-            android:minHeight="60dp"
-            android:text="Add a person"
-            android:textAllCaps="false"
-            android:textColor="@color/duo_button_text"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+    <ScrollView
+        android:id="@+id/knownPeopleScrollView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:fillViewport="true"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/knownPeopleHeader">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:background="@drawable/duo_card_background"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="32dp">
 
             <TextView
-                android:id="@+id/knownPeopleStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:accessibilityLiveRegion="polite"
-                android:fontFamily="sans-serif-rounded"
-                android:text="Loading saved people…"
-                android:textColor="@color/duo_ink"
-                android:textSize="19sp"
+                android:text="@string/recognize_familiar_people"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="18sp" />
+
+            <!-- Privacy Card with IBM Carbon Highlight Tint -->
+            <TextView
+                android:id="@+id/knownPeoplePrivacy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:background="@drawable/duo_info_card_background"
+                android:padding="16dp"
+                android:text="@string/face_privacy_notice"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="18sp" />
+
+            <!-- Section 1: Add Person -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:accessibilityHeading="true"
+                android:text="@string/add_a_person_heading"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="16sp"
                 android:textStyle="bold" />
 
             <LinearLayout
-                android:id="@+id/knownPeopleList"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                android:layout_marginTop="8dp"
+                android:background="@drawable/duo_card_background"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <EditText
+                    android:id="@+id/personNameInput"
+                    style="@style/Widget.Drishti.TextInputEditText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/person_name_description"
+                    android:hint="@string/person_name_hint"
+                    android:inputType="textPersonName|textCapWords"
+                    android:minHeight="56dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:textSize="18sp" />
+
+                <Button
+                    android:id="@+id/addKnownPersonButton"
+                    style="@style/Widget.Drishti.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:minHeight="56dp"
+                    android:text="@string/add_a_person"
+                    android:textAllCaps="false"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Section 2: Saved People -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:accessibilityHeading="true"
+                android:text="@string/saved_profiles_heading"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/duo_card_background"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/knownPeopleStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:accessibilityLiveRegion="polite"
+                    android:text="@string/loading_saved_people"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/knownPeopleList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
         </LinearLayout>
-    </LinearLayout>
-</ScrollView>
+    </ScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

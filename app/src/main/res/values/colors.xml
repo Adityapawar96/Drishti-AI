@@ -1,15 +1,62 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
-    <color name="duo_green">#58CC02</color>
-    <color name="duo_green_deep">#347D16</color>
-    <color name="duo_canvas">#F4FAF3</color>
-    <color name="duo_surface">#FFFFFFFF</color>
-    <color name="duo_ink">#19351D</color>
-    <color name="duo_button_text">#19351D</color>
-    <color name="duo_muted">#4E6252</color>
-    <color name="duo_border">#D7E6D5</color>
-    <color name="duo_pale_green">#E8F8E1</color>
-    <color name="duo_panel">#123524</color>
+    <!-- Playful Green palette -->
+    <color name="color_background">#FFFFFF</color>
+    <color name="color_surface">#F7F7F7</color>
+    <color name="color_surface_highlight">#EAF8E1</color>
+    <color name="color_surface_blue">#EAF7FE</color>
+    <color name="color_surface_yellow">#FFF8DB</color>
+    <color name="color_surface_disabled">#E5E5E5</color>
+    <color name="color_button_disabled">#E5E5E5</color>
+
+    <color name="color_primary">#58CC02</color>
+    <color name="color_primary_pressed">#58A700</color>
+    <color name="color_on_primary">#102A00</color>
+    <color name="color_primary_dark">#2B5E00</color>
+    <color name="color_link">#2B5E00</color>
+    <color name="color_icon">#2B5E00</color>
+    <color name="color_accent">#1CB0F6</color>
+    <color name="color_accent_pressed">#1899D6</color>
+    <color name="color_on_accent">#0B2A3F</color>
+    <color name="color_highlight">#FFC800</color>
+    <color name="color_on_highlight">#3A2D00</color>
+    <color name="color_focus_ring">#2B5E00</color>
+
+    <color name="color_text_primary">#3C3C3C</color>
+    <color name="color_text_secondary">#4F4F4F</color>
+    <color name="color_text_secondary_large">#707070</color>
+    <color name="color_text_disabled">#555555</color>
+    <color name="color_divider">#E5E5E5</color>
+    <color name="color_outline">#E5E5E5</color>
+    <color name="color_outline_interactive">#2B5E00</color>
+
+    <color name="color_error">#C62828</color>
+    <color name="color_error_fill">#FF4B4B</color>
+    <color name="color_on_error">#102A00</color>
+    <color name="color_success">#2B5E00</color>
+    <color name="color_warning">#FF9600</color>
+    <color name="color_warning_pressed">#FFB14A</color>
+    <color name="color_on_warning">#3C3C3C</color>
+    <color name="color_warning_surface">#FFF3E1</color>
+    <color name="color_camera_controls_surface">#F7F7F7</color>
+    <color name="color_snackbar_background">#3C3C3C</color>
+    <color name="color_on_snackbar">#FFFFFF</color>
+
+    <!-- Overlays and scrims -->
+    <color name="color_transparent">#00000000</color>
+    <color name="pressed_overlay">#1A2B5E00</color>
+    <color name="pressed_on_primary_overlay">#33102A00</color>
+    <color name="focus_overlay">#332B5E00</color>
+    <color name="camera_face_guide_scrim">#26000000</color>
+    <color name="launcher_grid_line">#1A2B5E00</color>
+    <color name="launcher_shadow">#00000000</color>
+
+    <!-- Camera overlay semantic colors -->
+    <color name="detection_box_object">#58CC02</color>
+    <color name="detection_box_pothole">#FF9600</color>
+    <color name="detection_box_outer_stroke">#FFFFFF</color>
+    <color name="detection_label_background_object">#58CC02</color>
+    <color name="detection_label_text_object">#102A00</color>
+    <color name="detection_label_background_pothole">#FF9600</color>
+    <color name="detection_label_text_pothole">#3C3C3C</color>
 </resources>

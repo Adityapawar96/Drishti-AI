@@ -8,6 +8,8 @@ import java.nio.ByteBuffer;
 
 /** Copies a stride-aware RGBA CameraX frame into a smaller upright bitmap. */
 public final class CameraBitmapUtils {
+    public static final int FACE_FRAME_MAX_DIMENSION = 800;
+
     private CameraBitmapUtils() { }
 
     public static FrameBitmap fromRgba(ImageProxy image, int maxDimension) {

@@ -1,85 +1,138 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/enrollmentRoot"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground">
 
     <androidx.camera.view.PreviewView
         android:id="@+id/enrollmentPreview"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
         app:scaleType="fillCenter" />
 
     <View
+        android:id="@+id/enrollmentFaceGuide"
         android:layout_width="230dp"
         android:layout_height="290dp"
-        android:layout_gravity="center"
         android:background="@drawable/enrollment_face_guide"
-        android:importantForAccessibility="no" />
+        android:importantForAccessibility="no"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/enrollmentGuidelineStart"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="top"
-        android:layout_margin="12dp"
+        android:orientation="vertical"
+        app:layout_constraintGuide_begin="16dp" />
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/enrollmentGuidelineEnd"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintGuide_end="16dp" />
+
+    <!-- Top Status Card -->
+    <LinearLayout
+        android:id="@+id/enrollmentTopControls"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
         android:background="@drawable/camera_status_background"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:padding="16dp"
+        app:layout_constraintEnd_toEndOf="@id/enrollmentGuidelineEnd"
+        app:layout_constraintStart_toStartOf="@id/enrollmentGuidelineStart"
+        app:layout_constraintTop_toTopOf="parent">
 
-        <TextView
-            android:id="@+id/enrollmentTitle"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:accessibilityHeading="true"
-            android:fontFamily="sans-serif-rounded"
-            android:text="Add a known person"
-            android:textColor="#FFFFFFFF"
-            android:textSize="26sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/enrollmentTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:accessibilityHeading="true"
+                android:text="@string/add_known_person_title"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+            <ImageButton
+                android:id="@+id/enrollmentHeaderCancelButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/home_button_background"
+                android:contentDescription="@string/cancel_enrollment"
+                android:minWidth="56dp"
+                android:minHeight="56dp"
+                android:padding="16dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_home"
+                app:tint="@color/color_icon" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/enrollmentStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="8dp"
             android:accessibilityLiveRegion="polite"
-            android:text="Preparing offline face recognition…"
-            android:textColor="#FFFFFFFF"
+            android:text="@string/preparing_face_recognition"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="18sp" />
     </LinearLayout>
 
+    <!-- Bottom Action Controls in bottom third -->
     <LinearLayout
-        android:layout_width="match_parent"
+        android:id="@+id/enrollmentBottomControls"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:layout_margin="12dp"
+        android:layout_marginBottom="16dp"
         android:background="@drawable/camera_controls_background"
         android:gravity="center"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:padding="16dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="@id/enrollmentGuidelineEnd"
+        app:layout_constraintStart_toStartOf="@id/enrollmentGuidelineStart">
 
         <Button
             android:id="@+id/startEnrollmentButton"
+            style="@style/Widget.Drishti.Button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:backgroundTint="@color/duo_green"
-            android:minHeight="60dp"
-            android:text="Start guided capture"
+            android:minHeight="56dp"
+            android:text="@string/start_guided_capture"
             android:textAllCaps="false"
-            android:textColor="@color/duo_button_text"
             android:textSize="18sp"
             android:textStyle="bold" />
 
         <Button
             android:id="@+id/cancelEnrollmentButton"
+            style="@style/Widget.Drishti.Button.Secondary"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:backgroundTint="@color/duo_pale_green"
+            android:layout_marginTop="8dp"
             android:minHeight="56dp"
-            android:text="Cancel"
+            android:text="@string/cancel"
             android:textAllCaps="false"
-            android:textColor="@color/duo_button_text"
-            android:textSize="17sp" />
+            android:textSize="18sp"
+            android:textStyle="bold" />
     </LinearLayout>
-</FrameLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

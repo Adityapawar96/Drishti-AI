@@ -10,6 +10,10 @@
 
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.camera" android:required="true" />
 
     <application
@@ -24,6 +28,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -31,14 +36,30 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".DrishtiService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
         <activity
             android:name=".face.KnownPeopleActivity"
             android:exported="false"
-            android:label="Known people" />
+            android:label="Known people"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="Settings"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".HapticTestActivity"
+            android:exported="false"
+            android:label="Test haptics"
+            android:screenOrientation="portrait" />
         <activity
             android:name=".face.FaceEnrollmentActivity"
             android:exported="false"
-            android:label="Enroll a person" />
+            android:label="Enroll a person"
+            android:screenOrientation="portrait" />
     </application>
 
 </manifest>

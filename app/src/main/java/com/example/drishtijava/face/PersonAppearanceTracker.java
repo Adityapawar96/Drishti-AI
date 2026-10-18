@@ -13,8 +13,8 @@ import java.util.Set;
 /** Lightweight person-box tracks with a two-second absence window for re-arming alerts. */
 public final class PersonAppearanceTracker {
     public static final long REARM_AFTER_ABSENT_MS = 2000;
-    // Keep aligned with ObjectAlertSpeaker.MIN_PERSON_ALERT_CONFIDENCE.
-    private static final float MIN_PERSON_CONFIDENCE = 0.30f;
+    // Keep low-confidence YOLO person boxes available to face matching; generic speech uses a higher cutoff.
+    private static final float MIN_PERSON_CONFIDENCE = 0.15f;
     private static final float MIN_IOU = 0.20f;
     private final List<PersonTrack> tracks = new ArrayList<>();
     private long nextId = 1;

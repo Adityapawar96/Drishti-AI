@@ -1,8 +1,6 @@
 package com.example.drishtijava.face;
 
 import android.content.Intent;
-import android.content.res.ColorStateList;
-import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
@@ -14,8 +12,10 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
+import androidx.core.content.res.ResourcesCompat;
 import androidx.core.view.ViewCompat;
+
+import com.google.android.material.button.MaterialButton;
 
 import java.util.List;
 import java.util.Locale;
@@ -51,6 +51,7 @@ public final class KnownPeopleActivity extends AppCompatActivity {
                 });
         addButton = findViewById(com.example.drishtijava.R.id.addKnownPersonButton);
         addButton.setOnClickListener(view -> confirmConsentAndEnroll());
+        findViewById(com.example.drishtijava.R.id.knownPeopleBackButton).setOnClickListener(view -> finish());
         loadProfiles();
     }
 
@@ -63,17 +64,17 @@ public final class KnownPeopleActivity extends AppCompatActivity {
         String name = nameInput.getText().toString().trim();
         nameInput.setError(null);
         if (name.isEmpty()) {
-            nameInput.setError("Enter a name first");
+            nameInput.setError(getString(com.example.drishtijava.R.string.enter_name_first));
             nameInput.requestFocus();
             return;
         }
         if (name.length() > 40) {
-            nameInput.setError("Use a name up to 40 characters");
+            nameInput.setError(getString(com.example.drishtijava.R.string.name_too_long));
             nameInput.requestFocus();
             return;
         }
         addButton.setEnabled(false);
-        status.setText("Checking saved people…");
+        status.setText(com.example.drishtijava.R.string.checking_saved_people);
         ioExecutor.execute(() -> {
             try {
                 List<FaceProfile> profiles = profileStore.load();
@@ -84,9 +85,9 @@ public final class KnownPeopleActivity extends AppCompatActivity {
                     addButton.setEnabled(true);
                     showProfiles(profiles);
                     if (alreadySaved) {
-                        nameInput.setError("A person with that name is already saved");
+                        nameInput.setError(getString(com.example.drishtijava.R.string.duplicate_saved_name));
                         nameInput.requestFocus();
-                        status.setText("That name is already in known people.");
+                        status.setText(com.example.drishtijava.R.string.duplicate_known_person);
                         return;
                     }
                     showConsentAndEnroll(name);
@@ -95,7 +96,7 @@ public final class KnownPeopleActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     if (isFinishing() || isDestroyed()) return;
                     addButton.setEnabled(true);
-                    status.setText("Saved people could not be checked. Please try again.");
+                    status.setText(com.example.drishtijava.R.string.saved_people_check_failed);
                 });
             }
         });
@@ -103,10 +104,10 @@ public final class KnownPeopleActivity extends AppCompatActivity {
 
     private void showConsentAndEnroll(String name) {
         new AlertDialog.Builder(this)
-                .setTitle("Consent to face recognition")
-                .setMessage("Only enroll this person if they understand and agree. Their face profile is encrypted on this device, their photos are not saved, and you can delete the profile at any time.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("I have their consent", (dialog, which) -> {
+                .setTitle(com.example.drishtijava.R.string.face_consent_title)
+                .setMessage(com.example.drishtijava.R.string.face_consent_message)
+                .setNegativeButton(com.example.drishtijava.R.string.cancel, null)
+                .setPositiveButton(com.example.drishtijava.R.string.i_have_consent, (dialog, which) -> {
                     Intent intent = new Intent(this, FaceEnrollmentActivity.class);
                     intent.putExtra("person_name", name);
                     enrollmentLauncher.launch(intent);
@@ -115,13 +116,13 @@ public final class KnownPeopleActivity extends AppCompatActivity {
     }
 
     private void loadProfiles() {
-        status.setText("Loading saved people…");
+        status.setText(com.example.drishtijava.R.string.loading_saved_people);
         ioExecutor.execute(() -> {
             try {
                 List<FaceProfile> profiles = profileStore.load();
                 runOnUiThread(() -> showProfiles(profiles));
             } catch (Exception e) {
-                runOnUiThread(() -> status.setText("Saved people could not be opened. Reinstalling or restoring the app may have removed the encryption key."));
+                runOnUiThread(() -> status.setText(com.example.drishtijava.R.string.saved_people_unavailable));
             }
         });
     }
@@ -129,10 +130,12 @@ public final class KnownPeopleActivity extends AppCompatActivity {
     private void showProfiles(List<FaceProfile> profiles) {
         list.removeAllViews();
         if (profiles.isEmpty()) {
-            status.setText("No known people saved yet.");
+            status.setText(com.example.drishtijava.R.string.no_known_people);
             return;
         }
-        status.setText(profiles.size() + (profiles.size() == 1 ? " known person saved." : " known people saved."));
+        status.setText(profiles.size() == 1
+                ? getString(com.example.drishtijava.R.string.known_person_saved_one)
+                : getString(com.example.drishtijava.R.string.known_people_saved_many, profiles.size()));
         for (FaceProfile profile : profiles) {
             LinearLayout profileCard = new LinearLayout(this);
             profileCard.setOrientation(LinearLayout.VERTICAL);
@@ -141,23 +144,23 @@ public final class KnownPeopleActivity extends AppCompatActivity {
 
             TextView name = new TextView(this);
             name.setText(profile.name);
-            name.setTextSize(21f);
-            name.setTextColor(ContextCompat.getColor(this, com.example.drishtijava.R.color.duo_ink));
-            name.setTypeface(Typeface.create("sans-serif-rounded", Typeface.BOLD));
+            name.setTextSize(22f);
+            name.setTypeface(ResourcesCompat.getFont(this,
+                    com.example.drishtijava.R.font.baloo2_bold));
             name.setPadding(0, dp(4), 0, dp(8));
-            name.setContentDescription("Known person: " + profile.name);
+            name.setContentDescription(getString(
+                    com.example.drishtijava.R.string.known_person_accessibility, profile.name));
             ViewCompat.setAccessibilityHeading(name, true);
             profileCard.addView(name, new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-            Button delete = new Button(this);
-            delete.setText("Delete " + profile.name);
-            delete.setContentDescription("Delete the saved face profile for " + profile.name);
+            MaterialButton delete = new MaterialButton(this, null,
+                    com.google.android.material.R.attr.materialButtonOutlinedStyle);
+            delete.setText(getString(com.example.drishtijava.R.string.delete_person, profile.name));
+            delete.setContentDescription(getString(
+                    com.example.drishtijava.R.string.delete_person_description, profile.name));
             delete.setMinHeight(dp(56));
             delete.setAllCaps(false);
-            delete.setTextColor(ContextCompat.getColor(this, com.example.drishtijava.R.color.duo_button_text));
-            delete.setBackgroundTintList(ColorStateList.valueOf(
-                    ContextCompat.getColor(this, com.example.drishtijava.R.color.duo_pale_green)));
             delete.setOnClickListener(view -> confirmDelete(profile));
             profileCard.addView(delete, new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -171,15 +174,15 @@ public final class KnownPeopleActivity extends AppCompatActivity {
 
     private void confirmDelete(FaceProfile profile) {
         new AlertDialog.Builder(this)
-                .setTitle("Delete " + profile.name + "?")
-                .setMessage("This removes the encrypted face profile from this device.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Delete", (dialog, which) -> ioExecutor.execute(() -> {
+                .setTitle(getString(com.example.drishtijava.R.string.delete_person_title, profile.name))
+                .setMessage(com.example.drishtijava.R.string.delete_profile_message)
+                .setNegativeButton(com.example.drishtijava.R.string.cancel, null)
+                .setPositiveButton(com.example.drishtijava.R.string.delete, (dialog, which) -> ioExecutor.execute(() -> {
                     try {
                         profileStore.delete(profile.id);
                         runOnUiThread(this::loadProfiles);
                     } catch (Exception e) {
-                        runOnUiThread(() -> status.setText("Could not delete that face profile."));
+                        runOnUiThread(() -> status.setText(com.example.drishtijava.R.string.delete_person_failed));
                     }
                 }))
                 .show();

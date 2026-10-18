@@ -4,6 +4,8 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
 
@@ -11,6 +13,8 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
@@ -66,6 +70,25 @@ public final class FaceEnrollmentActivity extends AppCompatActivity {
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_face_enrollment);
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.enrollmentRoot), (v, insets) -> {
+            androidx.core.graphics.Insets bars = insets.getInsets(
+                    WindowInsetsCompat.Type.systemBars()
+                    | WindowInsetsCompat.Type.displayCutout());
+            View topControls = findViewById(R.id.enrollmentTopControls);
+            View bottomControls = findViewById(R.id.enrollmentBottomControls);
+            float density = getResources().getDisplayMetrics().density;
+            if (topControls != null) {
+                ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) topControls.getLayoutParams();
+                lp.topMargin = bars.top + Math.round(16 * density);
+                topControls.setLayoutParams(lp);
+            }
+            if (bottomControls != null) {
+                ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) bottomControls.getLayoutParams();
+                lp.bottomMargin = bars.bottom + Math.round(16 * density);
+                bottomControls.setLayoutParams(lp);
+            }
+            return insets;
+        });
         personName = getIntent().getStringExtra("person_name");
         if (personName == null || personName.trim().isEmpty()) {
             setResult(RESULT_CANCELED);
@@ -77,24 +100,25 @@ public final class FaceEnrollmentActivity extends AppCompatActivity {
         statusView = findViewById(R.id.enrollmentStatus);
         startButton = findViewById(R.id.startEnrollmentButton);
         Button cancelButton = findViewById(R.id.cancelEnrollmentButton);
-        titleView.setText("Adding " + personName.trim());
+        titleView.setText(getString(R.string.enrolling_person, personName.trim()));
         startButton.setEnabled(false);
         startButton.setOnClickListener(view -> requestCameraAndStart());
         cancelButton.setOnClickListener(view -> finishWithCancel());
+        findViewById(R.id.enrollmentHeaderCancelButton).setOnClickListener(view -> finishWithCancel());
         previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
         profileStore = new FaceProfileStore(getApplicationContext());
         cameraExecutor = Executors.newSingleThreadExecutor();
         worker = Executors.newSingleThreadExecutor();
         FaceDetectorOptions options = new FaceDetectorOptions.Builder()
-                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
                 .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
-                .setMinFaceSize(0.12f)
+                .setMinFaceSize(0.08f)
                 .build();
         faceDetector = FaceDetection.getClient(options);
         cameraPermissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
             if (granted) startFrontCamera();
             else {
-                showStatus("Camera permission was denied. You can still use object alerts.");
+                showStatus(getString(R.string.enrollment_camera_permission_denied));
                 startButton.setEnabled(true);
             }
         });
@@ -104,11 +128,11 @@ public final class FaceEnrollmentActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     if (closed) return;
                     startButton.setEnabled(true);
-                    showStatus("The face model is ready. Ask " + personName + " to agree, then start guided capture.");
+                    showStatus(getString(R.string.face_model_ready, personName));
                 });
             } catch (Exception e) {
                 Log.e(TAG, "Could not load face embedding model", e);
-                runOnUiThread(() -> showStatus("Face recognition could not start: " + e.getMessage()));
+                runOnUiThread(() -> showStatus(getString(R.string.face_model_start_failed, e.getMessage())));
             }
         });
     }
@@ -144,7 +168,7 @@ public final class FaceEnrollmentActivity extends AppCompatActivity {
             } catch (Exception e) {
                 Log.e(TAG, "Could not open the front camera", e);
                 scanning = false;
-                showStatus("Could not open the front camera. Check that this phone has a front camera.");
+                showStatus(getString(R.string.front_camera_open_failed));
                 startButton.setEnabled(true);
             }
         }, ContextCompat.getMainExecutor(this));
@@ -153,14 +177,15 @@ public final class FaceEnrollmentActivity extends AppCompatActivity {
     private void analyze(@NonNull ImageProxy image) {
         try {
             if (!scanning || frameNumber.incrementAndGet() % 3 != 0 || !frameInFlight.compareAndSet(false, true)) return;
-            CameraBitmapUtils.FrameBitmap frame = CameraBitmapUtils.fromRgba(image, 640);
+            CameraBitmapUtils.FrameBitmap frame = CameraBitmapUtils.fromRgba(image,
+                    CameraBitmapUtils.FACE_FRAME_MAX_DIMENSION);
             BitmapFrame input = new BitmapFrame(frame.bitmap, frame.scaleX, frame.scaleY);
             faceDetector.process(InputImage.fromBitmap(input.bitmap, 0))
                     .addOnSuccessListener(faces -> onFaces(input, faces))
                     .addOnFailureListener(error -> {
                         Log.w(TAG, "Enrollment face detection failed", error);
                         releaseFrame(input.bitmap);
-                        showStatus("Face detection failed. Keep one face clearly in view.");
+                        showStatus(getString(R.string.enrollment_face_detection_failed));
                     });
         } catch (Exception e) {
             Log.w(TAG, "Could not copy enrollment camera frame", e);
@@ -176,7 +201,8 @@ public final class FaceEnrollmentActivity extends AppCompatActivity {
             return;
         }
         if (faces.size() != 1) {
-            showStatus(faces.isEmpty() ? "Move into the center of the camera view." : "Only one person should be in the camera view during enrollment.");
+            showStatus(getString(faces.isEmpty() ? R.string.move_center_camera
+                    : R.string.one_person_enrollment));
             releaseFrame(frame.bitmap);
             return;
         }
@@ -184,7 +210,7 @@ public final class FaceEnrollmentActivity extends AppCompatActivity {
         android.graphics.Rect bounds = face.getBoundingBox();
         if (bounds.width() / frame.scaleX < 100 || bounds.height() / frame.scaleY < 100
                 || !hasAllLandmarks(face)) {
-            showStatus("Move closer and face the light so both eyes, nose, and mouth are clear.");
+            showStatus(getString(R.string.move_closer_light));
             releaseFrame(frame.bitmap);
             return;
         }
@@ -203,8 +229,8 @@ public final class FaceEnrollmentActivity extends AppCompatActivity {
         }
         lastSampleAtMs = now;
         int poseAtCapture = currentPose;
-        showStatus(poseName(poseAtCapture) + " view. Capturing sample " + (samples[poseAtCapture].size() + 1)
-                + " of " + SAMPLES_PER_POSE + ". Hold still.");
+        showStatus(getString(R.string.capture_sample_status, poseName(poseAtCapture),
+                samples[poseAtCapture].size() + 1, SAMPLES_PER_POSE));
         try {
             worker.execute(() -> captureEmbedding(frame, face, poseAtCapture));
         } catch (RuntimeException e) {
@@ -216,7 +242,7 @@ public final class FaceEnrollmentActivity extends AppCompatActivity {
         try {
             android.graphics.Bitmap aligned = FaceAligner.align(frame.bitmap, face);
             if (aligned == null) {
-                runOnUiThread(() -> showStatus("The face landmarks were unclear. Hold still and try again."));
+                runOnUiThread(() -> showStatus(getString(R.string.face_landmarks_unclear)));
                 return;
             }
             float[] embedding;
@@ -240,7 +266,7 @@ public final class FaceEnrollmentActivity extends AppCompatActivity {
             }
         } catch (Exception e) {
             Log.w(TAG, "Could not create enrollment embedding", e);
-            runOnUiThread(() -> showStatus("Could not capture that sample. Keep the face well lit and try again."));
+            runOnUiThread(() -> showStatus(getString(R.string.capture_sample_failed)));
         } finally {
             if (!frame.bitmap.isRecycled()) frame.bitmap.recycle();
             frameInFlight.set(false);
@@ -251,7 +277,7 @@ public final class FaceEnrollmentActivity extends AppCompatActivity {
         List<float[]> poseAverages = new ArrayList<>();
         for (List<float[]> poseSamples : samples) {
             if (poseSamples.size() < SAMPLES_PER_POSE) {
-                runOnUiThread(() -> showStatus("A pose needs three clear samples. Please try again."));
+                runOnUiThread(() -> showStatus(getString(R.string.pose_samples_needed)));
                 return;
             }
             poseAverages.add(FaceMath.averageNormalized(poseSamples));
@@ -266,7 +292,8 @@ public final class FaceEnrollmentActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.w(TAG, "Could not save encrypted face profile", e);
             runOnUiThread(() -> {
-                showStatus(e.getMessage() == null ? "Could not save the face profile." : e.getMessage());
+                showStatus(e.getMessage() == null ? getString(R.string.save_face_profile_failed)
+                        : e.getMessage());
                 startButton.setEnabled(true);
             });
         }
@@ -276,15 +303,15 @@ public final class FaceEnrollmentActivity extends AppCompatActivity {
         if (closed) return;
         if (currentPose >= 3) return;
         int count = samples[currentPose].size();
-        String cue;
-        if (currentPose == 0) cue = "Look straight at the camera.";
-        else if (currentPose == 1) cue = "Turn your head slightly to your left.";
-        else cue = "Turn your head slightly to your right.";
-        showStatus(cue + " Captured " + count + " of " + SAMPLES_PER_POSE + " samples for this pose.");
+        int cueId = currentPose == 0 ? R.string.look_straight_camera
+                : currentPose == 1 ? R.string.turn_head_left : R.string.turn_head_right;
+        showStatus(getString(R.string.pose_sample_progress, getString(cueId),
+                count, SAMPLES_PER_POSE));
     }
 
-    private static String poseName(int pose) {
-        return pose == 0 ? "Front" : pose == 1 ? "Slight-left" : "Slight-right";
+    private String poseName(int pose) {
+        return getString(pose == 0 ? R.string.pose_front
+                : pose == 1 ? R.string.pose_slight_left : R.string.pose_slight_right);
     }
 
     private static boolean hasAllLandmarks(Face face) {

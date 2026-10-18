@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/hapticTestRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
+    android:fitsSystemWindows="true">
+
+    <!-- Top Header Bar matching common edge and Home/Back button position -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/hapticTestHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="16dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="12dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/hapticTestTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:accessibilityHeading="true"
+            android:gravity="center_vertical|start"
+            android:text="@string/test_haptics"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toBottomOf="@id/hapticTestHeaderBackButton"
+            app:layout_constraintEnd_toStartOf="@id/hapticTestHeaderBackButton"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@id/hapticTestHeaderBackButton" />
+
+        <ImageButton
+            android:id="@+id/hapticTestHeaderBackButton"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:background="@drawable/home_button_background"
+            android:contentDescription="@string/back_to_settings"
+            android:minWidth="56dp"
+            android:minHeight="56dp"
+            android:padding="16dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_home"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="@color/color_icon" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <TextView
+        android:id="@+id/hapticTestStatus"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:accessibilityLiveRegion="polite"
+        android:text="@string/haptic_test_instruction"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="18sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/hapticTestHeader" />
+
+    <ScrollView
+        android:id="@+id/hapticTestScrollView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp"
+        android:fillViewport="true"
+        app:layout_constraintBottom_toTopOf="@id/hapticTestBackButton"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/hapticTestStatus">
+
+        <LinearLayout
+            android:id="@+id/hapticPatternButtons"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp" />
+    </ScrollView>
+
+    <!-- Bottom Action Button placed in the bottom third for one-handed reach -->
+    <Button
+        android:id="@+id/hapticTestBackButton"
+        style="@style/Widget.Drishti.Button"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:contentDescription="@string/return_to_settings"
+        android:minHeight="56dp"
+        android:text="@string/back_to_settings_title"
+        android:textAllCaps="false"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
