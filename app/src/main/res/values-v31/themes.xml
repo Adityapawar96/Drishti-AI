@@ -2,7 +2,8 @@
 <resources>
     <style name="Theme.DrishtiJava" parent="Base.Theme.DrishtiJava">
         <item name="android:windowSplashScreenBackground">@color/color_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_drishti_logo</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/color_primary</item>
         <item name="android:windowSplashScreenAnimationDuration">180</item>
     </style>
 </resources>

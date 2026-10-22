@@ -42,6 +42,12 @@
     <color name="color_snackbar_background">#3C3C3C</color>
     <color name="color_on_snackbar">#FFFFFF</color>
 
+    <!-- Fixed brand artwork colors; these do not change with the app theme. -->
+    <color name="brand_logo_eye">#FFFFFF</color>
+    <color name="brand_logo_pupil">#2B5E00</color>
+    <color name="brand_logo_smile">#102A00</color>
+    <color name="brand_logo_edge">#EAF8E1</color>
+
     <!-- Overlays and scrims -->
     <color name="color_transparent">#00000000</color>
     <color name="pressed_overlay">#1A2B5E00</color>

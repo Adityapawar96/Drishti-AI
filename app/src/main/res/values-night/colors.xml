@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Forest dark palette. Brand artwork and camera detection colors stay fixed. -->
+    <color name="color_background">#101810</color>
+    <color name="color_surface">#1C291E</color>
+    <color name="color_surface_highlight">#253B29</color>
+    <color name="color_surface_blue">#1C2F38</color>
+    <color name="color_surface_yellow">#352F1A</color>
+    <color name="color_surface_disabled">#303A31</color>
+    <color name="color_button_disabled">#303A31</color>
+
+    <color name="color_primary">#58CC02</color>
+    <color name="color_primary_pressed">#58A700</color>
+    <color name="color_on_primary">#102A00</color>
+    <color name="color_primary_dark">#B5F28C</color>
+    <color name="color_link">#B5F28C</color>
+    <color name="color_icon">#B5F28C</color>
+    <color name="color_accent">#1CB0F6</color>
+    <color name="color_accent_pressed">#1899D6</color>
+    <color name="color_on_accent">#0B2A3F</color>
+    <color name="color_highlight">#FFC800</color>
+    <color name="color_on_highlight">#3A2D00</color>
+    <color name="color_focus_ring">#B5F28C</color>
+
+    <color name="color_text_primary">#F2F6F0</color>
+    <color name="color_text_secondary">#C4CEC2</color>
+    <color name="color_text_secondary_large">#C4CEC2</color>
+    <color name="color_text_disabled">#AAB3A8</color>
+    <color name="color_divider">#3D4A3D</color>
+    <color name="color_outline">#849383</color>
+    <color name="color_outline_interactive">#B5F28C</color>
+
+    <color name="color_error">#FF9A9A</color>
+    <color name="color_error_fill">#FF7272</color>
+    <color name="color_on_error">#3B1115</color>
+    <color name="color_success">#B5F28C</color>
+    <color name="color_warning">#FF9600</color>
+    <color name="color_warning_pressed">#FFB14A</color>
+    <color name="color_on_warning">#342100</color>
+    <color name="color_warning_surface">#3A2B18</color>
+    <color name="color_camera_controls_surface">#1C291E</color>
+    <color name="color_snackbar_background">#29392B</color>
+    <color name="color_on_snackbar">#F2F6F0</color>
+
+    <color name="pressed_overlay">#1AB5F28C</color>
+    <color name="pressed_on_primary_overlay">#33102A00</color>
+    <color name="focus_overlay">#33B5F28C</color>
+</resources>

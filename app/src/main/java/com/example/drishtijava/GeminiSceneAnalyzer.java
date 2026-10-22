@@ -166,6 +166,8 @@ final class GeminiSceneAnalyzer implements AutoCloseable {
                 .put("contents", new JSONArray().put(new JSONObject().put("parts", parts)))
                 .put("generationConfig", new JSONObject()
                         .put("temperature", 0.2)
+                        .put("thinkingConfig", new JSONObject()
+                                .put("thinkingLevel", "minimal"))
                         .put("maxOutputTokens", 120));
 
         HttpURLConnection connection = (HttpURLConnection) new URL(ENDPOINT).openConnection();

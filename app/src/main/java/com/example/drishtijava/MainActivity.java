@@ -6,6 +6,12 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -37,18 +43,23 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import java.util.Collections;
 
 /** Camera screen UI; camera, inference and alert resources are owned by DrishtiService. */
-public class MainActivity extends AppCompatActivity implements DrishtiService.Listener {
+public class MainActivity extends AppCompatActivity implements DrishtiService.Listener, SensorEventListener {
+    private static final long POCKET_STATE_DEBOUNCE_MS = 250L;
+    private static final String STATE_SETTINGS_TRANSITION = "settings_transition";
     private PreviewView previewView;
     private OverlayView overlayView;
     private TextView statusText;
     private TextView sceneAnalysisText;
     private TextView performanceText;
     private TextView lightStatusText;
+    private TextView startupLoadingStatus;
+    private View startupOverlay;
     private MaterialButton objectsModeButton;
     private MaterialButton roadModeButton;
     private Button pauseDetectionButton;
     private ImageButton settingsButton;
     private Button setupInstructionsBubble;
+    private androidx.appcompat.app.AlertDialog cameraSetupDialog;
     private ActivityResultLauncher<String> cameraPermissionLauncher;
     private ActivityResultLauncher<String> notificationPermissionLauncher;
     private DrishtiService service;
@@ -68,6 +79,25 @@ public class MainActivity extends AppCompatActivity implements DrishtiService.Li
     private float previewTapDownY;
     private long previewTapDownMs;
     private boolean previewTapCandidate;
+    private boolean previewStreaming;
+    private boolean startupComplete;
+    private boolean startupFailed;
+    private boolean startupHideStarted;
+    private SensorManager sensorManager;
+    private Sensor proximitySensor;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private boolean pocketTouchLockEnabled;
+    private boolean pocketTouchLocked;
+    private boolean suppressCurrentTouchSequence;
+    private boolean touchSequenceActive;
+    private Boolean pendingPocketLockState;
+    private final Runnable applyPendingPocketLock = () -> {
+        if (pendingPocketLockState != null) {
+            boolean locked = pendingPocketLockState;
+            pendingPocketLockState = null;
+            setPocketTouchLocked(locked);
+        }
+    };
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override public void onServiceConnected(ComponentName name, IBinder binder) {
@@ -90,6 +120,8 @@ public class MainActivity extends AppCompatActivity implements DrishtiService.Li
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        settingsTransition = savedInstanceState != null
+                && savedInstanceState.getBoolean(STATE_SETTINGS_TRANSITION, false);
         setContentView(R.layout.activity_main);
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (view, insets) -> {
             androidx.core.graphics.Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
@@ -115,12 +147,20 @@ public class MainActivity extends AppCompatActivity implements DrishtiService.Li
         sceneAnalysisText = findViewById(R.id.sceneAnalysisText);
         performanceText = findViewById(R.id.performanceText);
         lightStatusText = findViewById(R.id.lightStatusText);
+        startupOverlay = findViewById(R.id.startupOverlay);
+        startupLoadingStatus = findViewById(R.id.startupLoadingStatus);
         objectsModeButton = findViewById(R.id.objectsModeButton);
         roadModeButton = findViewById(R.id.roadModeButton);
         pauseDetectionButton = findViewById(R.id.pauseDetectionButton);
         settingsButton = findViewById(R.id.settingsButton);
         setupInstructionsBubble = findViewById(R.id.setupInstructionsBubble);
         previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
+        previewView.getPreviewStreamState().observe(this, state -> {
+            previewStreaming = state == PreviewView.StreamState.STREAMING;
+            updateStartupScreen();
+            updateDetectionModeButton();
+            updateDetectionButton();
+        });
         configureSceneAnalysisGesture();
         updateSetupInstructionsBubble();
         setupInstructionsBubble.setOnClickListener(view -> showCameraSetupInstructions());
@@ -142,8 +182,16 @@ public class MainActivity extends AppCompatActivity implements DrishtiService.Li
         });
         cameraPermissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestPermission(), granted -> {
-                    if (granted) startAndBindService("start");
-                    else statusText.setText(R.string.camera_permission_denied_settings);
+                    if (granted) {
+                        startupFailed = false;
+                        updateStartupScreen();
+                        startAndBindService("start");
+                    }
+                    else {
+                        statusText.setText(R.string.camera_permission_denied_settings);
+                        startupFailed = true;
+                        updateStartupScreen();
+                    }
                 });
         notificationPermissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestPermission(), granted -> {
@@ -154,18 +202,118 @@ public class MainActivity extends AppCompatActivity implements DrishtiService.Li
         objectsModeButton.setEnabled(false);
         roadModeButton.setEnabled(false);
         pauseDetectionButton.setEnabled(false);
+        settingsButton.setEnabled(false);
+        setupInstructionsBubble.setEnabled(false);
         statusText.setText(R.string.camera_permission_needed);
+        updateStartupScreen();
+    }
+
+    @Override protected void onSaveInstanceState(@NonNull Bundle outState) {
+        outState.putBoolean(STATE_SETTINGS_TRANSITION, settingsTransition);
+        super.onSaveInstanceState(outState);
     }
 
     @Override protected void onResume() {
         super.onResume();
+        registerPocketSensorIfNeeded();
         updateSetupInstructionsBubble();
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED) {
+            if (!startupComplete) {
+                startupFailed = false;
+                startupHideStarted = false;
+            }
             startAndBindService(settingsTransition ? "resume" : "start");
         } else if (!isFinishing()) {
             cameraPermissionLauncher.launch(Manifest.permission.CAMERA);
         }
+    }
+
+    private void registerPocketSensorIfNeeded() {
+        SharedPreferences prefs = getSharedPreferences(AppSettings.PREFERENCES, MODE_PRIVATE);
+        pocketTouchLockEnabled = prefs.getBoolean(AppSettings.POCKET_TOUCH_LOCK_ENABLED,
+                AppSettings.DEFAULT_POCKET_TOUCH_LOCK_ENABLED);
+        sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+        proximitySensor = sensorManager == null ? null
+                : sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
+        if (!pocketTouchLockEnabled || proximitySensor == null) {
+            setPocketTouchLocked(false);
+            return;
+        }
+        sensorManager.registerListener(this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
+    }
+
+    private void unregisterPocketSensor() {
+        mainHandler.removeCallbacks(applyPendingPocketLock);
+        pendingPocketLockState = null;
+        if (sensorManager != null) sensorManager.unregisterListener(this);
+        setPocketTouchLocked(false);
+        proximitySensor = null;
+        sensorManager = null;
+    }
+
+    @Override public void onSensorChanged(SensorEvent event) {
+        if (!pocketTouchLockEnabled || proximitySensor == null || event.sensor != proximitySensor
+                || event.values.length == 0) return;
+        boolean covered = event.values[0] < proximitySensor.getMaximumRange();
+        if (covered == pocketTouchLocked && pendingPocketLockState == null) return;
+        mainHandler.removeCallbacks(applyPendingPocketLock);
+        pendingPocketLockState = covered;
+        mainHandler.postDelayed(applyPendingPocketLock, POCKET_STATE_DEBOUNCE_MS);
+    }
+
+    @Override public void onAccuracyChanged(Sensor sensor, int accuracy) { }
+
+    private void setPocketTouchLocked(boolean locked) {
+        if (pocketTouchLocked == locked) return;
+        pocketTouchLocked = locked;
+        if (locked) {
+            suppressCurrentTouchSequence = touchSequenceActive;
+            previewTapCandidate = false;
+            resetPreviewTapSequence();
+        }
+        if (locked && cameraSetupDialog != null && cameraSetupDialog.isShowing()) {
+            cameraSetupDialog.dismiss();
+        }
+        TextView lockStatus = findViewById(R.id.pocketTouchLockStatus);
+        if (lockStatus != null) {
+            lockStatus.setVisibility(locked ? View.VISIBLE : View.GONE);
+            if (locked) lockStatus.announceForAccessibility(lockStatus.getText());
+        }
+    }
+
+    @Override public boolean dispatchTouchEvent(MotionEvent event) {
+        int action = event.getActionMasked();
+        if (pocketTouchLocked) {
+            if (touchSequenceActive || action == MotionEvent.ACTION_DOWN) {
+                suppressCurrentTouchSequence = true;
+            }
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                suppressCurrentTouchSequence = false;
+                touchSequenceActive = false;
+            }
+            return true;
+        }
+        if (suppressCurrentTouchSequence) {
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                suppressCurrentTouchSequence = false;
+                touchSequenceActive = false;
+            }
+            return true;
+        }
+        boolean handled = super.dispatchTouchEvent(event);
+        if (action == MotionEvent.ACTION_DOWN) touchSequenceActive = true;
+        else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            touchSequenceActive = false;
+        }
+        return handled;
+    }
+
+    @Override protected void onPause() {
+        unregisterPocketSensor();
+        suppressCurrentTouchSequence = false;
+        touchSequenceActive = false;
+        super.onPause();
     }
 
     private void startAndBindService(String action) {
@@ -178,7 +326,42 @@ public class MainActivity extends AppCompatActivity implements DrishtiService.Li
             }
         } catch (SecurityException | IllegalStateException e) {
             statusText.setText(R.string.camera_detection_start_failed);
+            startupFailed = true;
+            updateStartupScreen();
         }
+    }
+
+    private void updateStartupScreen() {
+        if (startupOverlay == null) return;
+        if (startupFailed) {
+            startupOverlay.animate().cancel();
+            startupOverlay.setVisibility(View.GONE);
+            startupHideStarted = false;
+            settingsButton.setEnabled(true);
+            setupInstructionsBubble.setEnabled(true);
+            previewView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            return;
+        }
+        if (!startupComplete && modelReady && previewStreaming) startupComplete = true;
+        boolean readyForInput = startupComplete;
+        settingsButton.setEnabled(readyForInput);
+        setupInstructionsBubble.setEnabled(readyForInput);
+        previewView.setImportantForAccessibility(readyForInput
+                ? View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                : View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        if (readyForInput) {
+            if (!startupHideStarted) {
+                startupHideStarted = true;
+                startupOverlay.animate().alpha(0f).setDuration(220L).withEndAction(() -> {
+                    if (startupOverlay != null) startupOverlay.setVisibility(View.GONE);
+                }).start();
+            }
+            return;
+        }
+        startupOverlay.setAlpha(1f);
+        startupOverlay.setVisibility(View.VISIBLE);
+        startupLoadingStatus.setText(modelReady
+                ? R.string.startup_camera_loading : R.string.startup_detection_loading);
     }
 
     private void requestNotificationPermissionIfNeeded() {
@@ -218,6 +401,10 @@ public class MainActivity extends AppCompatActivity implements DrishtiService.Li
         detectionPaused = paused;
         this.roadAvailable = roadAvailable;
         statusText.setText(message);
+        if (message.startsWith("Model error:")) startupFailed = true;
+        else if (ready) startupFailed = false;
+        if (!ready && message.startsWith("Model error:")) startupComplete = false;
+        updateStartupScreen();
         updateDetectionModeButton();
         updateDetectionButton();
         if (!ready) performanceText.setText(R.string.performance_initial);
@@ -231,6 +418,12 @@ public class MainActivity extends AppCompatActivity implements DrishtiService.Li
 
     @Override public void onDetections(java.util.List<Detection> detections, int width, int height) {
         if (overlayView != null) overlayView.update(detections, width, height);
+        if (!startupComplete && modelReady && !startupFailed) {
+            startupComplete = true;
+            updateStartupScreen();
+            updateDetectionModeButton();
+            updateDetectionButton();
+        }
     }
 
     @Override public void onPerformance(String value) {
@@ -260,20 +453,18 @@ public class MainActivity extends AppCompatActivity implements DrishtiService.Li
         if (objectsModeButton == null || roadModeButton == null) return;
         objectsModeButton.setBackgroundResource(roadMode
                 ? R.drawable.button_secondary_background : R.drawable.button_primary_background);
-        objectsModeButton.setIconResource(roadMode
-                ? R.drawable.ic_objects : R.drawable.ic_objects_selected);
+        objectsModeButton.setIconResource(R.drawable.ic_objects);
         objectsModeButton.setTextColor(ContextCompat.getColorStateList(this,
                 roadMode ? R.color.button_secondary_text : R.color.button_primary_text));
         objectsModeButton.setText(modelReady ? R.string.mode_objects_short : R.string.mode_objects_loading);
         objectsModeButton.setContentDescription(getString(!modelReady
                 ? R.string.object_mode_loading_description
                 : roadMode ? R.string.select_object_mode : R.string.object_mode_selected));
-        objectsModeButton.setEnabled(modelReady);
+        objectsModeButton.setEnabled(modelReady && startupComplete);
 
         roadModeButton.setBackgroundResource(roadMode
                 ? R.drawable.button_warning_background : R.drawable.button_secondary_background);
-        roadModeButton.setIconResource(roadMode
-                ? R.drawable.ic_road_selected : R.drawable.ic_road);
+        roadModeButton.setIconResource(R.drawable.ic_road);
         roadModeButton.setTextColor(ContextCompat.getColorStateList(this,
                 roadMode ? R.color.button_warning_text : R.color.button_secondary_text));
         roadModeButton.setText(!modelReady ? R.string.mode_road_loading
@@ -283,7 +474,7 @@ public class MainActivity extends AppCompatActivity implements DrishtiService.Li
                 ? R.string.road_mode_loading_description
                 : !roadAvailable && !roadMode ? R.string.road_mode_unavailable_description
                 : roadMode ? R.string.road_mode_selected : R.string.select_road_mode));
-        roadModeButton.setEnabled(modelReady && (roadMode || roadAvailable));
+        roadModeButton.setEnabled(modelReady && startupComplete && (roadMode || roadAvailable));
     }
 
     private void updateDetectionButton() {
@@ -291,7 +482,7 @@ public class MainActivity extends AppCompatActivity implements DrishtiService.Li
         pauseDetectionButton.setText(detectionPaused ? R.string.resume : R.string.pause);
         pauseDetectionButton.setContentDescription(getString(detectionPaused
                 ? R.string.detection_paused_description : R.string.detection_running_description));
-        pauseDetectionButton.setEnabled(modelReady);
+        pauseDetectionButton.setEnabled(modelReady && startupComplete);
     }
 
     private void configureSceneAnalysisGesture() {
@@ -426,6 +617,7 @@ public class MainActivity extends AppCompatActivity implements DrishtiService.Li
         int[] currentStep = {0};
         android.graphics.Bitmap[] bitmap = {null};
         androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(this).setView(content).create();
+        cameraSetupDialog = dialog;
         dialog.setCancelable(true);
         dialog.setCanceledOnTouchOutside(false);
         Runnable showStep = () -> {
@@ -472,6 +664,7 @@ public class MainActivity extends AppCompatActivity implements DrishtiService.Li
         });
         image.setOnTouchListener((view, event) -> gesture.onTouchEvent(event));
         dialog.setOnDismissListener(ignored -> {
+            if (cameraSetupDialog == dialog) cameraSetupDialog = null;
             image.setImageDrawable(null);
             if (bitmap[0] != null && !bitmap[0].isRecycled()) bitmap[0].recycle();
         });

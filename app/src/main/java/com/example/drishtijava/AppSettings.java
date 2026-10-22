@@ -3,7 +3,14 @@ package com.example.drishtijava;
 /** Shared preference keys used by the camera and settings screens. */
 final class AppSettings {
     static final String PREFERENCES = "camera_preferences";
+    static final String APP_THEME = "app_theme";
+    static final String APP_THEME_SYSTEM = "system";
+    static final String APP_THEME_LIGHT = "light";
+    static final String APP_THEME_DARK = "dark";
+    static final String DEFAULT_APP_THEME = APP_THEME_SYSTEM;
     static final String AUTO_TORCH_ENABLED = "auto_torch_enabled";
+    static final String POCKET_TOUCH_LOCK_ENABLED = "pocket_touch_lock_enabled";
+    static final boolean DEFAULT_POCKET_TOUCH_LOCK_ENABLED = true;
     static final String VOICE_ALERTS_ENABLED = "voice_alerts_enabled";
     static final String SPEECH_LANGUAGE = "speech_language";
     static final String DEFAULT_SPEECH_LANGUAGE = "en";

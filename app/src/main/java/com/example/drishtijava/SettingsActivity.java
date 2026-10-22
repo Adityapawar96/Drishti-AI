@@ -2,9 +2,12 @@ package com.example.drishtijava;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.net.Uri;
+import android.view.View;
 import android.widget.RadioGroup;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -20,10 +23,12 @@ public final class SettingsActivity extends AppCompatActivity {
     private SharedPreferences preferences;
     private MaterialSwitch voiceAlertsSwitch;
     private MaterialSwitch autoTorchSwitch;
+    private MaterialSwitch pocketTouchLockSwitch;
     private MaterialSwitch hapticsSwitch;
     private MaterialSwitch urgentHapticsSwitch;
     private RadioGroup hapticsIntensityGroup;
     private RadioGroup speechLanguageGroup;
+    private RadioGroup appearanceModeGroup;
     private SeekBar cameraThresholdSeekBar;
     private TextView cameraThresholdValue;
     private int cameraThreshold;
@@ -33,8 +38,10 @@ public final class SettingsActivity extends AppCompatActivity {
         setContentView(R.layout.activity_settings);
 
         preferences = getSharedPreferences(AppSettings.PREFERENCES, MODE_PRIVATE);
+        appearanceModeGroup = findViewById(R.id.settingsAppearanceModeGroup);
         voiceAlertsSwitch = findViewById(R.id.settingsVoiceAlertsSwitch);
         autoTorchSwitch = findViewById(R.id.settingsAutoTorchSwitch);
+        pocketTouchLockSwitch = findViewById(R.id.settingsPocketTouchLockSwitch);
         hapticsSwitch = findViewById(R.id.settingsHapticsSwitch);
         urgentHapticsSwitch = findViewById(R.id.settingsUrgentHapticsSwitch);
         hapticsIntensityGroup = findViewById(R.id.hapticsIntensityGroup);
@@ -56,6 +63,21 @@ public final class SettingsActivity extends AppCompatActivity {
             preferences.edit().putString(AppSettings.SPEECH_LANGUAGE, value).apply();
         });
 
+        String appearance = preferences.getString(AppSettings.APP_THEME,
+                AppSettings.DEFAULT_APP_THEME);
+        appearanceModeGroup.check(AppSettings.APP_THEME_LIGHT.equals(appearance)
+                ? R.id.appearanceLight
+                : AppSettings.APP_THEME_DARK.equals(appearance)
+                ? R.id.appearanceDark : R.id.appearanceSystem);
+        appearanceModeGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            String selected = checkedId == R.id.appearanceLight
+                    ? AppSettings.APP_THEME_LIGHT
+                    : checkedId == R.id.appearanceDark
+                    ? AppSettings.APP_THEME_DARK : AppSettings.APP_THEME_SYSTEM;
+            preferences.edit().putString(AppSettings.APP_THEME, selected).apply();
+            AppTheme.applySavedMode(this);
+        });
+
         findViewById(R.id.settingsKnownPeopleButton).setOnClickListener(view ->
                 startActivity(new Intent(this, KnownPeopleActivity.class)));
 
@@ -64,6 +86,15 @@ public final class SettingsActivity extends AppCompatActivity {
 
         findViewById(R.id.settingsAutoTorchRow).setOnClickListener(view -> toggleAutoTorch());
         autoTorchSwitch.setOnClickListener(view -> toggleAutoTorch());
+
+        SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+        Sensor proximitySensor = sensorManager == null ? null
+                : sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
+        View pocketTouchLockRow = findViewById(R.id.settingsPocketTouchLockRow);
+        pocketTouchLockRow.setEnabled(proximitySensor != null);
+        pocketTouchLockRow.setOnClickListener(view -> togglePocketTouchLock());
+        pocketTouchLockSwitch.setOnClickListener(view -> togglePocketTouchLock());
+        pocketTouchLockSwitch.setEnabled(proximitySensor != null);
 
         findViewById(R.id.settingsHapticsRow).setOnClickListener(view -> toggleHaptics());
         hapticsSwitch.setOnClickListener(view -> toggleHaptics());
@@ -119,6 +150,15 @@ public final class SettingsActivity extends AppCompatActivity {
         updateToggleLabels();
     }
 
+    private void togglePocketTouchLock() {
+        SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+        if (sensorManager == null || sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY) == null) return;
+        boolean enabled = !preferences.getBoolean(AppSettings.POCKET_TOUCH_LOCK_ENABLED,
+                AppSettings.DEFAULT_POCKET_TOUCH_LOCK_ENABLED);
+        preferences.edit().putBoolean(AppSettings.POCKET_TOUCH_LOCK_ENABLED, enabled).apply();
+        updateToggleLabels();
+    }
+
     private void toggleHaptics() {
         boolean enabled = !preferences.getBoolean(AppSettings.HAPTICS_ENABLED,
                 AppSettings.DEFAULT_HAPTICS_ENABLED);
@@ -143,6 +183,17 @@ public final class SettingsActivity extends AppCompatActivity {
         autoTorchSwitch.setChecked(torchEnabled);
         autoTorchSwitch.setContentDescription(getString(torchEnabled
                 ? R.string.torch_state_on : R.string.torch_state_off));
+
+        boolean pocketLockEnabled = preferences.getBoolean(AppSettings.POCKET_TOUCH_LOCK_ENABLED,
+                AppSettings.DEFAULT_POCKET_TOUCH_LOCK_ENABLED);
+        SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+        boolean pocketLockAvailable = sensorManager != null
+                && sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY) != null;
+        pocketTouchLockSwitch.setChecked(pocketLockEnabled && pocketLockAvailable);
+        pocketTouchLockSwitch.setContentDescription(getString(!pocketLockAvailable
+                ? R.string.pocket_touch_lock_unavailable
+                : pocketLockEnabled ? R.string.pocket_touch_lock_state_on
+                : R.string.pocket_touch_lock_state_off));
 
         boolean hapticsEnabled = preferences.getBoolean(AppSettings.HAPTICS_ENABLED,
                 AppSettings.DEFAULT_HAPTICS_ENABLED);

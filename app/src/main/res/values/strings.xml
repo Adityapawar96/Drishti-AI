@@ -19,6 +19,11 @@
 
     <!-- Camera screen -->
     <string name="camera_starting">Starting camera…</string>
+    <string name="startup_title">Drishti is getting ready</string>
+    <string name="startup_subtitle">Preparing your camera and offline detection</string>
+    <string name="startup_detection_loading">Preparing offline detection…</string>
+    <string name="startup_camera_loading">Starting camera…</string>
+    <string name="startup_logo_description">Drishti logo</string>
     <string name="open_settings">Open settings</string>
     <string name="settings_icon">⚙</string>
     <string name="performance_initial">0.0 FPS  |  0 ms</string>
@@ -55,6 +60,15 @@
     <string name="settings_title">Settings</string>
     <string name="home">Home</string>
     <string name="settings_paused_notice">Camera and detection are paused while settings are open.</string>
+    <string name="section_appearance">Appearance</string>
+    <string name="appearance_summary">Choose how Drishti follows your device theme.</string>
+    <string name="appearance_group_description">Choose System, Light, or Dark appearance for Drishti</string>
+    <string name="appearance_system">System</string>
+    <string name="appearance_system_description">Follow your Android device appearance setting</string>
+    <string name="appearance_light">Light</string>
+    <string name="appearance_light_description">Always use the light appearance</string>
+    <string name="appearance_dark">Dark</string>
+    <string name="appearance_dark_description">Always use the dark appearance</string>
     <string name="section_people_recognition">People &amp; recognition</string>
     <string name="manage_face_profiles">Manage face profiles for offline person recognition.</string>
     <string name="manage_known_people">Manage known people</string>
@@ -93,6 +107,12 @@
     <string name="auto_torch">Auto torch</string>
     <string name="torch_cycle_summary">25-second torch cycle when dark</string>
     <string name="automatic_torch_description">Automatic torch</string>
+    <string name="pocket_touch_lock">Pocket touch lock</string>
+    <string name="pocket_touch_lock_summary">Ignore screen touches while the proximity sensor is covered. Detection continues.</string>
+    <string name="pocket_touch_lock_state_on">Pocket touch lock is on. Touches are ignored while the proximity sensor is covered. Double tap to turn it off.</string>
+    <string name="pocket_touch_lock_state_off">Pocket touch lock is off. Double tap to turn it on.</string>
+    <string name="pocket_touch_lock_unavailable">Pocket touch lock is unavailable because this phone has no proximity sensor.</string>
+    <string name="pocket_touch_lock_active">Pocket touch lock is active. Uncover the top of the phone to use the screen.</string>
     <string name="brightness_threshold_title">Camera brightness darkness threshold (0–255)</string>
     <string name="brightness_threshold_value">Darkness threshold: %1$d / 255</string>
     <string name="brightness_threshold_initial">Darkness threshold: 15 / 255</string>
@@ -146,7 +166,7 @@
     <string name="haptic_state_on">Haptic alerts are on. Double tap to turn them off.</string>
     <string name="haptic_state_off">Haptic alerts are off. Double tap to turn them on.</string>
     <string name="using_drishti_title">Using Drishti</string>
-    <string name="using_drishti_message">The camera and detection pause while Settings is open. Use Home to return to detection.\n\nKnown people manages saved face profiles. Voice alerts turns spoken object and hazard alerts on or off. Haptic alerts control vibrations independently; choose intensity or Urgent only, and use Test haptics to preview every vibration. Auto torch enables the 25-second torch cycle. The camera brightness threshold applies when Android does not provide a usable rear light sensor; higher values make the camera fallback treat dimmer scenes as dark sooner.\n\nUse Mode: Objects for the usual object and known-person detection, or Mode: Road for pothole detection. Triple tap the camera preview for one Gemini scene description. Scene analysis sends a still image only.</string>
+    <string name="using_drishti_message">The camera and detection pause while Settings is open. Use Home to return to detection.\n\nKnown people manages saved face profiles. Voice alerts turns spoken object and hazard alerts on or off. Haptic alerts control vibrations independently; choose intensity or Urgent only, and use Test haptics to preview every vibration. Auto torch enables the 25-second torch cycle. Pocket touch lock ignores camera-screen touches while the proximity sensor is covered; detection continues. The camera brightness threshold applies when Android does not provide a usable rear light sensor; higher values make the camera fallback treat dimmer scenes as dark sooner.\n\nUse Mode: Objects for the usual object and known-person detection, or Mode: Road for pothole detection. Triple tap the camera preview for one Gemini scene description. Scene analysis sends a still image only.</string>
     <string name="keep_detection_background_title">Keep detection running in the background</string>
     <string name="keep_detection_background_message">Some phones may stop background apps to save battery. For more reliable camera alerts, review Android battery optimization and your phone’s background or autostart settings. Drishti cannot override manufacturer restrictions automatically.</string>
     <string name="battery_settings">Battery settings</string>

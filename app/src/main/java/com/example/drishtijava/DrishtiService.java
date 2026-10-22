@@ -82,6 +82,7 @@ public final class DrishtiService extends LifecycleService implements SensorEven
     private final IBinder binder = new LocalBinder();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService analysisExecutor = Executors.newSingleThreadExecutor();
+    private final AtomicBoolean cameraModelsReleaseRequested = new AtomicBoolean(false);
     private final AtomicBoolean sceneFrameRequested = new AtomicBoolean(false);
     private final AtomicBoolean sceneAnalysisInProgress = new AtomicBoolean(false);
     private final DrishtiServiceState runState = new DrishtiServiceState();
@@ -491,10 +492,13 @@ public final class DrishtiService extends LifecycleService implements SensorEven
     private void analyze(@NonNull ImageProxy image) {
         long started = System.nanoTime();
         try {
+            if (shuttingDown) return;
+            // Capture a requested scene frame before local inference so Gemini's
+            // image preparation and network request can overlap with detection.
+            captureSceneFrameIfRequested(image);
             evaluateRearLightFromFrame(image);
             long nowMs = SystemClock.elapsedRealtime();
             if (minimumFrameIntervalMs > 0 && nowMs - lastAnalyzedAtMs < minimumFrameIntervalMs) {
-                captureSceneFrameIfRequested(image);
                 return;
             }
             lastAnalyzedAtMs = nowMs;
@@ -506,7 +510,6 @@ public final class DrishtiService extends LifecycleService implements SensorEven
             lastFrameWidth = width;
             lastFrameHeight = height;
             if (activeDetector == null || detectionPaused || activePowerStop()) {
-                captureSceneFrameIfRequested(image);
                 return;
             }
             ImageProxy.PlaneProxy plane = image.getPlanes()[0];
@@ -515,7 +518,6 @@ public final class DrishtiService extends LifecycleService implements SensorEven
             List<Detection> detections = activeDetector.detect(pixels, plane.getRowStride(),
                     plane.getPixelStride(), image.getWidth(), image.getHeight(), rotation);
             if (frameRoadMode != roadMode || detectionPaused) {
-                captureSceneFrameIfRequested(image);
                 return;
             }
             long elapsedNs = System.nanoTime() - started;
@@ -556,7 +558,6 @@ public final class DrishtiService extends LifecycleService implements SensorEven
                 }
                 speaker.onDetections(otherObjects, width, height);
             } else if (speaker != null) speaker.onDetections(detections, width, height);
-            captureSceneFrameIfRequested(image);
         } catch (Exception | LinkageError e) {
             Log.e(TAG, "Frame inference failed", e);
         } finally {
@@ -984,6 +985,7 @@ public final class DrishtiService extends LifecycleService implements SensorEven
     }
 
     private void releaseCameraAndModels() {
+        if (!cameraModelsReleaseRequested.compareAndSet(false, true)) return;
         if (cameraRetry != null) mainHandler.removeCallbacks(cameraRetry);
         cameraRetry = null;
         if (sceneCaptureTimeout != null) mainHandler.removeCallbacks(sceneCaptureTimeout);
@@ -995,12 +997,19 @@ public final class DrishtiService extends LifecycleService implements SensorEven
         unregisterLightSensor();
         requestTorchState(false);
         unbindCamera();
-        if (faceRecognitionManager != null) faceRecognitionManager.close();
-        if (geminiSceneAnalyzer != null) geminiSceneAnalyzer.close();
-        if (detector != null) detector.close();
-        YoloDetector road = potholeDetector;
-        potholeDetector = null;
-        if (road != null) road.close();
+        // ImageAnalysis and model loading share this single-thread executor. Queue model
+        // disposal there so a safety stop cannot close a TFLite delegate during inference.
+        analysisExecutor.execute(() -> {
+            FaceRecognitionManager faces = faceRecognitionManager;
+            if (faces != null) faces.close();
+            if (geminiSceneAnalyzer != null) geminiSceneAnalyzer.close();
+            YoloDetector objectDetector = detector;
+            detector = null;
+            if (objectDetector != null) objectDetector.close();
+            YoloDetector roadDetector = potholeDetector;
+            potholeDetector = null;
+            if (roadDetector != null) roadDetector.close();
+        });
     }
 
     private void cleanupCameraAndModels() {
@@ -1020,7 +1029,9 @@ public final class DrishtiService extends LifecycleService implements SensorEven
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && thermalListener != null && powerManager != null) {
             powerManager.removeThermalStatusListener(thermalListener);
         }
-        analysisExecutor.shutdownNow();
+        // releaseCameraAndModels() queues native model disposal on this executor;
+        // orderly shutdown lets that cleanup run after any in-flight analysis.
+        analysisExecutor.shutdown();
         if (unexpectedStop) showReopenNotification();
         super.onDestroy();
     }

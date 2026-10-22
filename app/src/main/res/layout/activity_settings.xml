@@ -80,6 +80,73 @@
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="18sp" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:accessibilityHeading="true"
+                android:text="@string/section_appearance"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/duo_card_background"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/appearance_summary"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="18sp" />
+
+                <RadioGroup
+                    android:id="@+id/settingsAppearanceModeGroup"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:contentDescription="@string/appearance_group_description">
+
+                    <RadioButton
+                        android:id="@+id/appearanceSystem"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:buttonTint="@color/control_check_tint"
+                        android:contentDescription="@string/appearance_system_description"
+                        android:minHeight="56dp"
+                        android:text="@string/appearance_system"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textSize="18sp" />
+
+                    <RadioButton
+                        android:id="@+id/appearanceLight"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:buttonTint="@color/control_check_tint"
+                        android:contentDescription="@string/appearance_light_description"
+                        android:minHeight="56dp"
+                        android:text="@string/appearance_light"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textSize="18sp" />
+
+                    <RadioButton
+                        android:id="@+id/appearanceDark"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:buttonTint="@color/control_check_tint"
+                        android:contentDescription="@string/appearance_dark_description"
+                        android:minHeight="56dp"
+                        android:text="@string/appearance_dark"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textSize="18sp" />
+                </RadioGroup>
+            </LinearLayout>
+
             <!-- SECTION 1: PEOPLE & RECOGNITION -->
             <TextView
                 android:layout_width="match_parent"
@@ -525,7 +592,58 @@
                     android:layout_height="1dp"
                     android:background="@color/color_divider" />
 
-                <!-- Row 2: Camera darkness threshold slider -->
+                <!-- Row 2: Pocket touch lock -->
+                <LinearLayout
+                    android:id="@+id/settingsPocketTouchLockRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:minHeight="64dp"
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingTop="12dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="12dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="16dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/pocket_touch_lock"
+                            android:textColor="?attr/colorOnSurface"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="@string/pocket_touch_lock_summary"
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            android:textSize="18sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/settingsPocketTouchLockSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:contentDescription="@string/pocket_touch_lock"
+                        android:minWidth="56dp"
+                        android:minHeight="56dp" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/color_divider" />
+
+                <!-- Row 3: Camera darkness threshold slider -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

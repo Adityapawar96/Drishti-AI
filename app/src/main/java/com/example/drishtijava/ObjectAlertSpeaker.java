@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -35,6 +36,7 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
     private static final float TRACK_MATCH_IOU = 0.25f;
     private static final int MAX_MISSED_FRAMES = 4;
     private static final int MAX_OBJECTS_PER_UTTERANCE = 2;
+    private static final long MAX_PENDING_OBJECT_AGE_MS = 1200;
     private static final long MIN_SPEECH_INTERVAL_MS = 2800;
     private static final long SAME_CLASS_COOLDOWN_MS = 3500;
 
@@ -50,16 +52,23 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
     private boolean initialized;
     private boolean speechVoiceReady;
     private boolean closed;
-    private boolean sceneSummaryActive;
+    private boolean pendingOperationalRequired;
+    private boolean speechDispatchScheduled;
     private long frameNumber;
     private long lastSpeechAtMs;
-    private int currentSpeechPriority = Integer.MAX_VALUE;
     private int utteranceNumber;
     private long nextTrackId = 1;
-    private String pendingFaceAlert;
+    private SpeechAlertArbiter.Kind currentSpeechKind;
+    private final Map<String, PendingObjectGroup> pendingObjectGroups = new LinkedHashMap<>();
+    private final Map<String, SpeechLocalizer.NamedPerson> pendingKnownPeople = new LinkedHashMap<>();
+    private PendingPersonAlert pendingUnknownPersonAlert;
     private String pendingSceneSummary;
     private String pendingOperationalStatus;
     private String currentUtteranceId;
+    private final Runnable speechDispatchRunnable = () -> {
+        speechDispatchScheduled = false;
+        dispatchPendingSpeech();
+    };
 
     public ObjectAlertSpeaker(Context context) {
         this(context, null);
@@ -81,12 +90,14 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
             tracks.clear();
             lastAlertByClass.clear();
             lastSpeechAtMs = 0;
-            currentSpeechPriority = Integer.MAX_VALUE;
-            currentUtteranceId = null;
-            sceneSummaryActive = false;
-            if (!enabled) pendingFaceAlert = null;
-            if (!enabled) pendingSceneSummary = null;
-            if (!enabled && initialized) textToSpeech.stop();
+            if (!enabled) {
+                clearPendingAlerts();
+                if (initialized) textToSpeech.stop();
+                currentUtteranceId = null;
+                currentSpeechKind = null;
+            } else {
+                dispatchPendingSpeech();
+            }
         });
     }
 
@@ -108,6 +119,7 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
         mainHandler.post(() -> {
             tracks.clear();
             lastAlertByClass.clear();
+            pendingObjectGroups.clear();
             frameNumber = 0;
         });
     }
@@ -122,7 +134,6 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
             SpeechLanguage selected = language == null ? SpeechLanguage.ENGLISH : language;
             boolean changed = selected != speechLanguage;
             if (changed) {
-                pendingFaceAlert = null;
                 pendingSceneSummary = null;
             }
             speechLanguage = selected;
@@ -146,18 +157,14 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
     public void speakPersonAlert(int count, boolean possible, SpeechLocalizer.Location location) {
         mainHandler.post(() -> {
             if (closed || !enabled) return;
-            String message = speechLocalizer.personAlert(count, possible, location);
-            if (!initialized) {
-                pendingFaceAlert = message;
-                return;
-            }
-            if (!speechVoiceReady) return;
-            if (sceneSummaryActive) {
-                if (pendingFaceAlert == null) pendingFaceAlert = message;
-                return;
-            }
-            speakFaceAlertOnMain(message);
+            pendingUnknownPersonAlert = new PendingPersonAlert(count, possible, location);
+            dispatchPendingSpeech();
         });
+    }
+
+    /** Drops an unknown-person alert that was waiting after its people-present period ended. */
+    public void clearPendingPersonAlert() {
+        mainHandler.post(() -> pendingUnknownPersonAlert = null);
     }
 
     /** Speaks recognized names and localized positions with the dedicated person haptic cue. */
@@ -168,18 +175,14 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
                 hapticManager.play(HapticPattern.KNOWN_PERSON);
             }
             if (!enabled) return;
-            String message = speechLocalizer.knownPersonAlerts(people);
-            if (message.isEmpty()) return;
-            if (!initialized) {
-                pendingFaceAlert = message;
-                return;
+            if (people != null) {
+                for (SpeechLocalizer.NamedPerson person : people) {
+                    if (person == null || person.name.isEmpty()) continue;
+                    String key = person.name.toLowerCase(Locale.ROOT);
+                    pendingKnownPeople.put(key, person);
+                }
             }
-            if (!speechVoiceReady) return;
-            if (sceneSummaryActive) {
-                if (pendingFaceAlert == null) pendingFaceAlert = message;
-                return;
-            }
-            speakFaceAlertOnMain(message);
+            dispatchPendingSpeech();
         });
     }
 
@@ -189,12 +192,8 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
         runOnMain(() -> {
             if (closed || !enabled) return;
             if (initialized && !speechVoiceReady) return;
-            if (!initialized) {
-                pendingSceneSummary = message;
-                return;
-            }
-            pendingSceneSummary = null;
-            speakSceneSummaryOnMain(message);
+            pendingSceneSummary = message;
+            dispatchPendingSpeech();
         });
     }
 
@@ -210,12 +209,12 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
             if (closed || (!enabled && !requiredNotice)) return;
             if (!initialized || !speechVoiceReady) {
                 pendingOperationalStatus = message;
+                pendingOperationalRequired = requiredNotice;
                 return;
             }
-            int queueMode = textToSpeech.isSpeaking() ? TextToSpeech.QUEUE_ADD : TextToSpeech.QUEUE_FLUSH;
-            String utteranceId = "operational-status-" + (++utteranceNumber);
-            int result = textToSpeech.speak(message, queueMode, null, utteranceId);
-            if (result != TextToSpeech.SUCCESS) Log.w(TAG, "Could not queue operational status: " + result);
+            pendingOperationalStatus = message;
+            pendingOperationalRequired = requiredNotice;
+            dispatchPendingSpeech();
         });
     }
 
@@ -257,8 +256,7 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
     private void applySpeechLanguageOnMain() {
         if (textToSpeech.isSpeaking()) textToSpeech.stop();
         currentUtteranceId = null;
-        currentSpeechPriority = Integer.MAX_VALUE;
-        sceneSummaryActive = false;
+        currentSpeechKind = null;
         Voice voice = findOfflineVoice(speechLanguage.getLocale());
         speechVoiceReady = voice != null && textToSpeech.setVoice(voice) == TextToSpeech.SUCCESS;
         if (!speechVoiceReady) {
@@ -268,22 +266,7 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
         SpeechLanguageCallback callback = pendingLanguageCallback;
         pendingLanguageCallback = null;
         if (callback != null) callback.onVoiceReady(speechVoiceReady);
-        if (!speechVoiceReady) return;
-        if (pendingOperationalStatus != null) {
-            String pending = pendingOperationalStatus;
-            pendingOperationalStatus = null;
-            speakFaceAlertOnMain(pending);
-            return;
-        }
-        if (enabled && pendingSceneSummary != null) {
-            String pending = pendingSceneSummary;
-            pendingSceneSummary = null;
-            speakSceneSummaryOnMain(pending);
-        } else if (enabled && pendingFaceAlert != null) {
-            String pending = pendingFaceAlert;
-            pendingFaceAlert = null;
-            speakFaceAlertOnMain(pending);
-        }
+        dispatchPendingSpeech();
     }
 
     private Voice findOfflineVoice(Locale locale) {
@@ -306,69 +289,186 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
         return best;
     }
 
-    private void speakFaceAlertOnMain(String message) {
-        if (!speechVoiceReady) return;
-        if (textToSpeech.isSpeaking()) textToSpeech.stop();
-        String utteranceId = "face-alert-" + (++utteranceNumber);
-        int result = textToSpeech.speak(message, TextToSpeech.QUEUE_FLUSH, null, utteranceId);
-        if (result != TextToSpeech.SUCCESS) {
-            Log.w(TAG, "Could not queue face alert: " + result);
+    private void dispatchPendingSpeech() {
+        if (closed || !initialized || !speechVoiceReady) return;
+
+        if (enabled && pendingSceneSummary != null) {
+            String message = pendingSceneSummary;
+            if (startSpeech(SpeechAlertArbiter.Kind.SCENE_SUMMARY, message, null)) {
+                pendingSceneSummary = null;
+            }
             return;
         }
-        lastSpeechAtMs = SystemClock.elapsedRealtime();
-        currentSpeechPriority = 0;
-        currentUtteranceId = utteranceId;
-        Log.d(TAG, "Speaking face alert: " + message);
+
+        if (enabled) {
+            long now = SystemClock.elapsedRealtime();
+            pruneStaleObjectGroups(now);
+
+            SpeechBatch urgent = nextObjectBatch(true);
+            if (urgent != null) {
+                if (startSpeech(SpeechAlertArbiter.Kind.URGENT_HAZARD,
+                        urgent.message, urgent.groups)) {
+                    removeSpokenObjectGroups(urgent.groups);
+                }
+                return;
+            }
+
+            if (!pendingKnownPeople.isEmpty()) {
+                String message = speechLocalizer.knownPersonAlerts(pendingKnownPeople.values());
+                if (message.isEmpty()) {
+                    pendingKnownPeople.clear();
+                } else if (startSpeech(SpeechAlertArbiter.Kind.KNOWN_PERSON, message, null)) {
+                    pendingKnownPeople.clear();
+                }
+                return;
+            }
+
+            if (pendingUnknownPersonAlert != null) {
+                PendingPersonAlert pending = pendingUnknownPersonAlert;
+                String message = speechLocalizer.personAlert(
+                        pending.count, pending.possible, pending.location);
+                if (startSpeech(SpeechAlertArbiter.Kind.UNKNOWN_PERSON, message, null)) {
+                    pendingUnknownPersonAlert = null;
+                }
+                return;
+            }
+
+            SpeechBatch routine = nextObjectBatch(false);
+            if (routine != null) {
+                long elapsed = now - lastSpeechAtMs;
+                boolean rateLimitedClass = routine.groups.get(0).priority > 0;
+                if (currentSpeechKind == null && rateLimitedClass
+                        && elapsed < MIN_SPEECH_INTERVAL_MS) {
+                    scheduleSpeechDispatch(MIN_SPEECH_INTERVAL_MS - elapsed);
+                    return;
+                }
+                if (startSpeech(SpeechAlertArbiter.Kind.ROUTINE_OBJECT,
+                        routine.message, routine.groups)) {
+                    removeSpokenObjectGroups(routine.groups);
+                }
+                return;
+            }
+        }
+
+        if (pendingOperationalStatus != null
+                && (enabled || pendingOperationalRequired)) {
+            String message = pendingOperationalStatus;
+            if (startSpeech(SpeechAlertArbiter.Kind.OPERATIONAL_STATUS, message, null)) {
+                pendingOperationalStatus = null;
+                pendingOperationalRequired = false;
+            }
+        }
     }
 
-    private void speakSceneSummaryOnMain(String message) {
-        // Stop any alert already speaking. Detection remains active, but its voice output
-        // is held until this scene description finishes.
-        sceneSummaryActive = true;
-        if (textToSpeech.isSpeaking()) textToSpeech.stop();
-        String utteranceId = "scene-summary-" + (++utteranceNumber);
+    private boolean startSpeech(SpeechAlertArbiter.Kind kind, String message,
+                                List<AlertGroup> spokenGroups) {
+        if (message == null || message.trim().isEmpty() || !initialized || !speechVoiceReady) return false;
+        SpeechAlertArbiter.Decision decision = SpeechAlertArbiter.decide(currentSpeechKind, kind);
+        if (decision == SpeechAlertArbiter.Decision.WAIT) return false;
+
+        if (decision == SpeechAlertArbiter.Decision.PREEMPT) {
+            if (textToSpeech.isSpeaking() || currentSpeechKind != null) textToSpeech.stop();
+            currentUtteranceId = null;
+            currentSpeechKind = null;
+        }
+
+        String utteranceId = kind.name().toLowerCase(Locale.ROOT) + "-" + (++utteranceNumber);
         int result = textToSpeech.speak(message, TextToSpeech.QUEUE_FLUSH, null, utteranceId);
         if (result != TextToSpeech.SUCCESS) {
-            Log.w(TAG, "Could not queue scene summary: " + result);
-            sceneSummaryActive = false;
-            currentSpeechPriority = Integer.MAX_VALUE;
-            currentUtteranceId = null;
-            speakPendingFaceAlertIfIdle();
-            return;
+            Log.w(TAG, "Could not start " + kind + " speech: " + result);
+            return false;
         }
-        currentSpeechPriority = -1;
+
+        long now = SystemClock.elapsedRealtime();
+        currentSpeechKind = kind;
         currentUtteranceId = utteranceId;
-        Log.d(TAG, "Speaking requested scene summary");
+        if (kind != SpeechAlertArbiter.Kind.SCENE_SUMMARY
+                && kind != SpeechAlertArbiter.Kind.OPERATIONAL_STATUS) {
+            lastSpeechAtMs = now;
+        }
+        if (spokenGroups != null) {
+            for (AlertGroup group : spokenGroups) {
+                for (Candidate member : group.members) member.track.announced = true;
+                lastAlertByClass.put(group.classKey, now);
+            }
+        }
+        Log.d(TAG, "Speaking " + kind);
+        return true;
     }
 
     private void onSpeechFinished(String utteranceId) {
-        if (utteranceId != null && utteranceId.equals(currentUtteranceId)) {
-            boolean finishedSceneSummary = sceneSummaryActive
-                    && utteranceId.startsWith("scene-summary-");
-            currentUtteranceId = null;
-            currentSpeechPriority = Integer.MAX_VALUE;
-            if (finishedSceneSummary) {
-                sceneSummaryActive = false;
-                speakPendingFaceAlertIfIdle();
-            }
+        if (utteranceId == null || !utteranceId.equals(currentUtteranceId)) return;
+        currentUtteranceId = null;
+        currentSpeechKind = null;
+        dispatchPendingSpeech();
+    }
+
+    private SpeechBatch nextObjectBatch(boolean urgentOnly) {
+        if (pendingObjectGroups.isEmpty()) return null;
+        List<AlertGroup> ordered = new ArrayList<>();
+        for (PendingObjectGroup pending : pendingObjectGroups.values()) {
+            AlertGroup group = pending.group;
+            if (urgentOnly == isUrgentHazard(group)) ordered.add(group);
         }
-        speakPendingSceneSummaryIfIdle();
+        if (ordered.isEmpty()) return null;
+        ordered.sort(Comparator.comparingInt((AlertGroup item) -> item.priority)
+                .thenComparing(Comparator.comparingDouble(
+                        (AlertGroup item) -> item.confidence).reversed()));
+
+        AlertGroup first = ordered.get(0);
+        List<AlertGroup> selected = new ArrayList<>();
+        StringBuilder message = new StringBuilder();
+        for (AlertGroup group : ordered) {
+            if (group.priority != first.priority || selected.size() >= MAX_OBJECTS_PER_UTTERANCE) break;
+            if (message.length() > 0) message.append(' ');
+            message.append(speechLocalizer.objectAlert(group.label, group.members.size(),
+                    group.lowConfidence, group.location));
+            selected.add(group);
+        }
+        return selected.isEmpty() ? null : new SpeechBatch(message.toString(), selected);
     }
 
-    private void speakPendingFaceAlertIfIdle() {
-        if (closed || !enabled || !initialized || !speechVoiceReady || sceneSummaryActive
-                || pendingFaceAlert == null) return;
-        String pending = pendingFaceAlert;
-        pendingFaceAlert = null;
-        speakFaceAlertOnMain(pending);
+    private void updatePendingObjectGroups(List<AlertGroup> currentGroups, long now) {
+        if (!enabled) {
+            pendingObjectGroups.clear();
+            return;
+        }
+        Set<String> currentKeys = new HashSet<>();
+        for (AlertGroup group : currentGroups) {
+            currentKeys.add(group.classKey);
+            pendingObjectGroups.put(group.classKey, new PendingObjectGroup(group, now));
+        }
+        pendingObjectGroups.keySet().removeIf(key -> !currentKeys.contains(key));
     }
 
-    private void speakPendingSceneSummaryIfIdle() {
-        if (closed || !enabled || !initialized || !speechVoiceReady || sceneSummaryActive || pendingSceneSummary == null
-                || textToSpeech.isSpeaking() || currentSpeechPriority <= 2) return;
-        String pending = pendingSceneSummary;
+    private void pruneStaleObjectGroups(long now) {
+        pendingObjectGroups.entrySet().removeIf(entry ->
+                now - entry.getValue().updatedAtMs > MAX_PENDING_OBJECT_AGE_MS);
+    }
+
+    private void removeSpokenObjectGroups(List<AlertGroup> groups) {
+        for (AlertGroup group : groups) pendingObjectGroups.remove(group.classKey);
+    }
+
+    private static boolean isUrgentHazard(AlertGroup group) {
+        return "pothole".equalsIgnoreCase(group.label)
+                || (group.priority == 0 && !"person".equalsIgnoreCase(group.label)
+                && group.confidence >= IMMEDIATE_HAZARD_CONFIDENCE);
+    }
+
+    private void scheduleSpeechDispatch(long delayMs) {
+        if (speechDispatchScheduled || closed) return;
+        speechDispatchScheduled = true;
+        mainHandler.postDelayed(speechDispatchRunnable, Math.max(1, delayMs));
+    }
+
+    private void clearPendingAlerts() {
+        mainHandler.removeCallbacks(speechDispatchRunnable);
+        speechDispatchScheduled = false;
+        pendingObjectGroups.clear();
+        pendingKnownPeople.clear();
+        pendingUnknownPersonAlert = null;
         pendingSceneSummary = null;
-        speakSceneSummaryOnMain(pending);
     }
 
     private void processDetections(List<Detection> detections, int frameWidth, int frameHeight) {
@@ -419,49 +519,30 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
         tracks.removeIf(track -> frameNumber - track.lastSeenFrame > MAX_MISSED_FRAMES + 1);
 
         long now = SystemClock.elapsedRealtime();
-        List<Candidate> ready = new ArrayList<>();
+        List<Candidate> voiceReady = new ArrayList<>();
+        List<Candidate> hapticReady = new ArrayList<>();
         for (Candidate candidate : current) {
             int requiredFrames = requiredFrames(candidate);
             boolean voicePending = enabled && !candidate.track.announced;
             boolean hapticPending = hapticsEnabled && !candidate.track.hapticallyAnnounced;
-            if ((voicePending || hapticPending)
-                    && candidate.track.consecutiveFrames >= requiredFrames) {
-                ready.add(candidate);
-            }
+            if (candidate.track.consecutiveFrames < requiredFrames) continue;
+            if (voicePending) voiceReady.add(candidate);
+            if (hapticPending) hapticReady.add(candidate);
         }
-        if (ready.isEmpty()) return;
-        ready.sort(Comparator.comparingInt((Candidate item) -> item.priority)
+        Comparator<Candidate> candidateOrder = Comparator.comparingInt((Candidate item) -> item.priority)
                 .thenComparing(Comparator.comparingDouble(
-                        (Candidate item) -> item.detection.confidence).reversed()));
+                        (Candidate item) -> item.detection.confidence).reversed());
+        voiceReady.sort(candidateOrder);
+        hapticReady.sort(candidateOrder);
 
-        List<AlertGroup> eligible = new ArrayList<>();
-        Set<String> groupedClassKeys = new HashSet<>();
-        for (Candidate candidate : ready) {
-            String classKey = candidate.track.classKey;
-            Long lastAlertAt = lastAlertByClass.get(classKey);
-            if (lastAlertAt != null && now - lastAlertAt < SAME_CLASS_COOLDOWN_MS) continue;
-            if (!groupedClassKeys.add(classKey)) continue;
-            eligible.add(groupFor(candidate, current));
-        }
-        if (eligible.isEmpty()) return;
-        eligible.sort(Comparator.comparingInt((AlertGroup item) -> item.priority)
-                .thenComparing(Comparator.comparingDouble((AlertGroup item) -> item.confidence).reversed()));
+        List<AlertGroup> hapticGroups = confirmedGroups(hapticReady, current, now);
+        List<AlertGroup> voiceGroups = confirmedGroups(voiceReady, current, now);
+        updatePendingObjectGroups(voiceGroups, now);
 
-        AlertGroup first = eligible.get(0);
-        StringBuilder message = new StringBuilder();
-        List<AlertGroup> selected = new ArrayList<>();
-        for (AlertGroup group : eligible) {
-            if (group.priority != first.priority || selected.size() >= MAX_OBJECTS_PER_UTTERANCE) break;
-            if (message.length() > 0) message.append(' ');
-            message.append(speechLocalizer.objectAlert(group.label, group.members.size(),
-                    group.lowConfidence, group.location));
-            selected.add(group);
-        }
-        if (selected.isEmpty()) return;
         // Haptics use the same confirmed and grouped detections as speech. The speaker's
         // normalized box-size proxy is only a rough on-screen proximity signal.
         if (hapticsEnabled) {
-            for (AlertGroup group : selected) {
+            for (AlertGroup group : hapticGroups) {
                 HapticPattern pattern = hapticPatternFor(group);
                 boolean pendingForGroup = false;
                 for (Candidate member : group.members) {
@@ -474,31 +555,23 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
                 for (Candidate member : group.members) member.track.hapticallyAnnounced = true;
             }
         }
+        dispatchPendingSpeech();
+    }
 
-        // Keep accumulating detections while the summary speaks, but do not let an alert
-        // replace or overlap the user-requested description.
-        if (sceneSummaryActive || !enabled || !initialized || !speechVoiceReady) return;
-        if (textToSpeech.isSpeaking()) {
-            if (first.priority < currentSpeechPriority) textToSpeech.stop();
-            else return;
+    private List<AlertGroup> confirmedGroups(List<Candidate> ready, List<Candidate> current, long now) {
+        List<AlertGroup> groups = new ArrayList<>();
+        Set<String> groupedClassKeys = new HashSet<>();
+        for (Candidate candidate : ready) {
+            String classKey = candidate.track.classKey;
+            Long lastAlertAt = lastAlertByClass.get(classKey);
+            if (lastAlertAt != null && now - lastAlertAt < SAME_CLASS_COOLDOWN_MS) continue;
+            if (!groupedClassKeys.add(classKey)) continue;
+            groups.add(groupFor(candidate, current));
         }
-        if (first.priority > 0 && now - lastSpeechAtMs < MIN_SPEECH_INTERVAL_MS) return;
-
-        String utteranceId = "object-alert-" + (++utteranceNumber);
-        int result = textToSpeech.speak(message, TextToSpeech.QUEUE_FLUSH, null, utteranceId);
-        if (result != TextToSpeech.SUCCESS) {
-            Log.w(TAG, "Could not queue object alert: " + result);
-            return;
-        }
-
-        lastSpeechAtMs = now;
-        currentSpeechPriority = first.priority;
-        currentUtteranceId = utteranceId;
-        for (AlertGroup group : selected) {
-            for (Candidate member : group.members) member.track.announced = true;
-            lastAlertByClass.put(group.classKey, now);
-        }
-        Log.d(TAG, "Speaking object alert");
+        groups.sort(Comparator.comparingInt((AlertGroup item) -> item.priority)
+                .thenComparing(Comparator.comparingDouble(
+                        (AlertGroup item) -> item.confidence).reversed()));
+        return groups;
     }
 
     private static HapticPattern hapticPatternFor(AlertGroup group) {
@@ -519,7 +592,9 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
     }
 
     private static int requiredFrames(Candidate candidate) {
-        if (candidate.priority == 0 && candidate.detection.confidence >= IMMEDIATE_HAZARD_CONFIDENCE) return 1;
+        boolean urgentClass = candidate.priority == 0
+                || "person".equalsIgnoreCase(candidate.detection.label);
+        if (urgentClass && candidate.detection.confidence >= IMMEDIATE_HAZARD_CONFIDENCE) return 1;
         if (candidate.detection.confidence >= IMMEDIATE_ALERT_CONFIDENCE) return 1;
         if (candidate.detection.confidence >= LOW_CONFIDENCE_CUTOFF) return FRAMES_TO_CONFIRM;
         return FRAMES_FOR_LOW_CONFIDENCE;
@@ -533,7 +608,6 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
             case "train":
             case "truck":
             case "bicycle":
-            case "person":
             case "pothole":
                 return 0;
             case "traffic light":
@@ -544,6 +618,7 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
             case "fire hydrant":
             case "potted plant":
                 return 1;
+            case "person":
             default:
                 return 2;
         }
@@ -593,10 +668,10 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
             textToSpeech.shutdown();
             tracks.clear();
             lastAlertByClass.clear();
-            pendingSceneSummary = null;
-            pendingFaceAlert = null;
+            clearPendingAlerts();
+            pendingOperationalStatus = null;
             currentUtteranceId = null;
-            sceneSummaryActive = false;
+            currentSpeechKind = null;
         });
     }
 
@@ -665,6 +740,38 @@ public final class ObjectAlertSpeaker implements AutoCloseable {
             boxSizeProxy = largestProxy;
             proximityScale = Math.max(0.65f, Math.min(1f,
                     0.65f + Math.max(0f, largestProxy - NEAR_BOX_SIZE_PROXY) * 0.7f));
+        }
+    }
+
+    private static final class PendingObjectGroup {
+        final AlertGroup group;
+        final long updatedAtMs;
+
+        PendingObjectGroup(AlertGroup group, long updatedAtMs) {
+            this.group = group;
+            this.updatedAtMs = updatedAtMs;
+        }
+    }
+
+    private static final class PendingPersonAlert {
+        final int count;
+        final boolean possible;
+        final SpeechLocalizer.Location location;
+
+        PendingPersonAlert(int count, boolean possible, SpeechLocalizer.Location location) {
+            this.count = Math.max(1, count);
+            this.possible = possible;
+            this.location = location == null ? SpeechLocalizer.Location.VIEW : location;
+        }
+    }
+
+    private static final class SpeechBatch {
+        final String message;
+        final List<AlertGroup> groups;
+
+        SpeechBatch(String message, List<AlertGroup> groups) {
+            this.message = message;
+            this.groups = groups;
         }
     }
 }

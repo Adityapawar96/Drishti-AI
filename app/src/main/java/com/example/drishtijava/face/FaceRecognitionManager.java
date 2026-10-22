@@ -36,7 +36,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class FaceRecognitionManager implements AutoCloseable {
     private static final String TAG = "FaceRecognition";
     private static final float MATCH_THRESHOLD = 0.68f;
-    private static final long GENERIC_DELAY_MS = 1800;
+    private static final long GENERIC_DELAY_MS = 2500;
     private static final long CONTINUOUS_VISIBILITY_MS = 250;
     private static final int MIN_FACE_PIXELS = 48;
     private static final float POSSIBLE_PERSON_CONFIDENCE = 0.40f;
@@ -50,13 +50,25 @@ public final class FaceRecognitionManager implements AutoCloseable {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final PersonAppearanceTracker tracker = new PersonAppearanceTracker();
+    private final Object peoplePeriodLock = new Object();
     private final AtomicBoolean faceTaskInFlight = new AtomicBoolean(false);
+    private final AtomicBoolean closeStarted = new AtomicBoolean(false);
     private final AtomicLong lastFaceSampleAtMs = new AtomicLong();
     private volatile List<FaceProfile> profiles = Collections.emptyList();
     private volatile int profileCount;
     private volatile boolean ready;
     private volatile boolean closed;
     private FaceEmbedder embedder;
+    private long peoplePeriodLastSeenAtMs;
+    private boolean genericAlertScheduled;
+    private boolean genericAlertAnnounced;
+    private final Runnable genericFlushRunnable = () -> {
+        synchronized (peoplePeriodLock) {
+            genericAlertScheduled = false;
+        }
+        flushGenericAlerts();
+    };
+    private final Runnable rearmGenericAlertRunnable = this::rearmGenericAlertIfAbsent;
 
     public FaceRecognitionManager(Context context, ObjectAlertSpeaker speaker) {
         appContext = context.getApplicationContext();
@@ -92,7 +104,7 @@ public final class FaceRecognitionManager implements AutoCloseable {
         ready = false;
         profileCount = 0;
         profiles = Collections.emptyList();
-        tracker.clear();
+        resetAppearances();
         try {
             worker.execute(() -> {
                 try {
@@ -114,21 +126,69 @@ public final class FaceRecognitionManager implements AutoCloseable {
         }
     }
 
-    public void resetAppearances() { tracker.clear(); }
+    public void resetAppearances() {
+        tracker.clear();
+        synchronized (peoplePeriodLock) {
+            peoplePeriodLastSeenAtMs = 0;
+            genericAlertScheduled = false;
+            genericAlertAnnounced = false;
+        }
+        mainHandler.removeCallbacks(genericFlushRunnable);
+        mainHandler.removeCallbacks(rearmGenericAlertRunnable);
+        speaker.clearPendingPersonAlert();
+    }
 
     /** Track YOLO person boxes on every analyzer result, without blocking the camera thread. */
     public void onPersonDetections(List<Detection> detections, int frameWidth) {
         if (closed || !hasProfiles() || frameWidth <= 0) return;
         long now = SystemClock.elapsedRealtime();
         Set<Long> oldIds = new HashSet<>();
-        for (PersonAppearanceTracker.PersonTrack track : tracker.snapshot()) oldIds.add(track.id);
-        List<PersonAppearanceTracker.PersonTrack> current = tracker.update(detections, now);
-        for (PersonAppearanceTracker.PersonTrack track : current) {
-            if (!oldIds.contains(track.id)) {
-                mainHandler.postDelayed(this::flushGenericAlerts, GENERIC_DELAY_MS);
+        List<PersonAppearanceTracker.PersonTrack> current;
+        boolean peopleVisible = false;
+        synchronized (tracker) {
+            for (PersonAppearanceTracker.PersonTrack track : tracker.snapshot()) oldIds.add(track.id);
+            current = tracker.update(detections, now);
+            for (PersonAppearanceTracker.PersonTrack track : current) {
+                if (track.lastSeenAtMs == now && track.confidence >= MIN_GENERIC_PERSON_CONFIDENCE) {
+                    peopleVisible = true;
+                }
             }
         }
         frameWidthForAlerts = frameWidth;
+        if (!peopleVisible) return;
+
+        boolean newTrack = false;
+        for (PersonAppearanceTracker.PersonTrack track : current) {
+            if (track.lastSeenAtMs == now && !oldIds.contains(track.id)) {
+                newTrack = true;
+                break;
+            }
+        }
+        boolean resetPeriod = false;
+        boolean startPeriod;
+        boolean scheduleFlush = false;
+        synchronized (peoplePeriodLock) {
+            startPeriod = peoplePeriodLastSeenAtMs == 0
+                    || PersonAppearanceTracker.isRearmed(peoplePeriodLastSeenAtMs, now);
+            if (peoplePeriodLastSeenAtMs > 0 && startPeriod) {
+                genericAlertAnnounced = false;
+                genericAlertScheduled = false;
+                resetPeriod = true;
+            }
+            peoplePeriodLastSeenAtMs = now;
+            if ((newTrack || startPeriod) && !genericAlertAnnounced && !genericAlertScheduled) {
+                genericAlertScheduled = true;
+                scheduleFlush = true;
+            }
+        }
+        mainHandler.removeCallbacks(rearmGenericAlertRunnable);
+        mainHandler.postDelayed(rearmGenericAlertRunnable,
+                PersonAppearanceTracker.REARM_AFTER_ABSENT_MS);
+        if (resetPeriod) {
+            mainHandler.removeCallbacks(genericFlushRunnable);
+            speaker.clearPendingPersonAlert();
+        }
+        if (scheduleFlush) mainHandler.postDelayed(genericFlushRunnable, GENERIC_DELAY_MS);
     }
 
     private volatile int frameWidthForAlerts;
@@ -219,18 +279,37 @@ public final class FaceRecognitionManager implements AutoCloseable {
         if (closed || !hasProfiles()) return;
         long now = SystemClock.elapsedRealtime();
         List<PersonAppearanceTracker.PersonTrack> pending = new ArrayList<>();
+        long nextEligibleAtMs = Long.MAX_VALUE;
         synchronized (tracker) {
             for (PersonAppearanceTracker.PersonTrack track : tracker.snapshot()) {
-                if (!track.nameAnnounced && !track.genericAnnounced
-                        && track.confidence >= MIN_GENERIC_PERSON_CONFIDENCE
-                        && now - track.firstSeenAtMs >= GENERIC_DELAY_MS
-                        && now - track.lastSeenAtMs <= CONTINUOUS_VISIBILITY_MS) {
+                if (track.nameAnnounced || track.genericAnnounced
+                        || track.confidence < MIN_GENERIC_PERSON_CONFIDENCE
+                        || now - track.lastSeenAtMs > CONTINUOUS_VISIBILITY_MS) continue;
+                long eligibleAtMs = track.firstSeenAtMs + GENERIC_DELAY_MS;
+                if (now >= eligibleAtMs) {
                     track.genericAnnounced = true;
                     pending.add(track);
+                } else {
+                    nextEligibleAtMs = Math.min(nextEligibleAtMs, eligibleAtMs);
                 }
             }
         }
-        if (pending.isEmpty()) return;
+        if (pending.isEmpty()) {
+            if (nextEligibleAtMs != Long.MAX_VALUE) {
+                synchronized (peoplePeriodLock) {
+                    if (!genericAlertAnnounced && !genericAlertScheduled) {
+                        genericAlertScheduled = true;
+                        mainHandler.postDelayed(genericFlushRunnable,
+                                Math.max(1, nextEligibleAtMs - now));
+                    }
+                }
+            }
+            return;
+        }
+        synchronized (peoplePeriodLock) {
+            if (genericAlertAnnounced) return;
+            genericAlertAnnounced = true;
+        }
         if (pending.size() == 1) {
             boolean possible = pending.get(0).confidence < POSSIBLE_PERSON_CONFIDENCE;
             speaker.speakPersonAlert(1, possible,
@@ -238,6 +317,26 @@ public final class FaceRecognitionManager implements AutoCloseable {
         } else {
             speaker.speakPersonAlert(pending.size(), false, SpeechLocalizer.Location.VIEW);
         }
+    }
+
+    private void rearmGenericAlertIfAbsent() {
+        if (closed) return;
+        long now = SystemClock.elapsedRealtime();
+        long absentFor;
+        synchronized (peoplePeriodLock) {
+            absentFor = now - peoplePeriodLastSeenAtMs;
+            if (peoplePeriodLastSeenAtMs == 0) return;
+            if (absentFor < PersonAppearanceTracker.REARM_AFTER_ABSENT_MS) {
+                mainHandler.postDelayed(rearmGenericAlertRunnable,
+                        PersonAppearanceTracker.REARM_AFTER_ABSENT_MS - absentFor);
+                return;
+            }
+            peoplePeriodLastSeenAtMs = 0;
+            genericAlertScheduled = false;
+            genericAlertAnnounced = false;
+        }
+        mainHandler.removeCallbacks(genericFlushRunnable);
+        speaker.clearPendingPersonAlert();
     }
 
     private static SpeechLocalizer.Location locationFor(RectF box, int width) {
@@ -248,6 +347,7 @@ public final class FaceRecognitionManager implements AutoCloseable {
     }
 
     @Override public void close() {
+        if (!closeStarted.compareAndSet(false, true)) return;
         closed = true;
         faceDetector.close();
         worker.execute(() -> {
@@ -259,5 +359,6 @@ public final class FaceRecognitionManager implements AutoCloseable {
         worker.shutdown();
         mainHandler.removeCallbacksAndMessages(null);
         tracker.clear();
+        speaker.clearPendingPersonAlert();
     }
 }
